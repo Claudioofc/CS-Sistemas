@@ -184,4 +184,8 @@ CSSistemas/
 - Senhas com hash seguro
 - Validação de entrada (FluentValidation)
 - CORS configurado para desenvolvimento
-- Dados sensíveis (connection string, JWT, admin, PIX, e-mail) via variáveis de ambiente ou appsettings.Development.json (não versionado)
+- **Dados sensíveis protegidos:**
+  - O repositório contém apenas **placeholders** em `appsettings.json` (sem senhas, JWT ou chaves reais).
+  - Crie `appsettings.Development.json` a partir de `appsettings.Development.example.json` e preencha com suas credenciais locais. Esse arquivo **não é versionado** (está no `.gitignore`).
+  - Em produção, use variáveis de ambiente ou `appsettings.Production.json` (também ignorado pelo Git) para connection string, JWT, admin, PIX, Mercado Pago e e-mail.
+  - **Se você já commitou credenciais no passado:** altere imediatamente a senha do banco, o JWT Secret, a senha do admin e regenere chaves de API (Resend, Mercado Pago, etc.).

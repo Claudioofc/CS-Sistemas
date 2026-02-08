@@ -20,11 +20,13 @@ project.fragment.lock.json
 node_modules/
 npm-debug.log*
 
-# Segredos (opcional: descomente se usar appsettings.Production.json com dados reais)
-# **/appsettings.Production.json
-
 # User secrets (dotnet user-secrets)
 secrets.json
 
-# Config com dados sensíveis (copie appsettings.Development.example.json e preencha localmente)
-CSSistemas.API/appsettings.Development.json
+# Dados sensíveis — NUNCA versionar
+**/appsettings.Development.json
+**/appsettings.Production.json
+**/.env
+.env
+.env.local
+.env.*.local
