@@ -25,3 +25,6 @@ npm-debug.log*
 
 # User secrets (dotnet user-secrets)
 secrets.json
+
+# Config com dados sensíveis (copie appsettings.Development.example.json e preencha localmente)
+CSSistemas.API/appsettings.Development.json
