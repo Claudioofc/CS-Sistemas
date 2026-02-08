@@ -1,5 +1,6 @@
 using CSSistemas.Application.Interfaces;
 using CSSistemas.Domain.Entities;
+using CSSistemas.Domain.Enums;
 using CSSistemas.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -35,6 +36,17 @@ public class SubscriptionRepository : ISubscriptionRepository
             .OrderByDescending(s => s.EndsAt)
             .ToListAsync(cancellationToken);
         return subs.GroupBy(s => s.UserId).Select(g => g.First()).ToList();
+    }
+
+    public async Task<IReadOnlyList<Subscription>> GetPremiumSubscriptionsOrderedByStartedAtAsync(int limit = 100, CancellationToken cancellationToken = default)
+    {
+        return await _context.Subscriptions
+            .AsNoTracking()
+            .Include(s => s.User)
+            .Where(s => s.SubscriptionType == SubscriptionType.Monthly)
+            .OrderByDescending(s => s.StartedAt)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
     }
 
     public async Task AddAsync(Subscription subscription, CancellationToken cancellationToken = default)

@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { apiGet } from '../api/client'
-import type { BusinessItem } from '../types/api'
+import type { BusinessItem, AdminPremiumSubscriptionItem } from '../types/api'
 import type { DashboardSummary, EarningsDetailResponse } from '../types/dashboard'
-import { formatDateAndTime, formatCurrency } from '../utils/format'
+import { formatDateAndTime, formatCurrency, formatDateOnly } from '../utils/format'
 import { ROUTES, NEGOCIO_SINGULAR } from '../constants'
 import { buildCsv, downloadCsv } from '../utils/exportCsv'
 import ValueVisibilityToggle from '../components/ui/ValueVisibilityToggle'
@@ -12,8 +12,9 @@ import Pagination from '../components/ui/Pagination'
 import { useDisplayCurrency } from '../contexts/ValuesVisibilityContext'
 
 export default function Ganhos() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const displayCurrency = useDisplayCurrency()
+  const isAdmin = user?.isAdmin === true
   const [businesses, setBusinesses] = useState<BusinessItem[]>([])
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null)
   const [summary, setSummary] = useState<Pick<DashboardSummary, 'ganhosDoMes'> | null>(null)
@@ -25,6 +26,8 @@ export default function Ganhos() {
   const [exportFrom, setExportFrom] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10))
   const [exportTo, setExportTo] = useState(() => new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10))
   const [exporting, setExporting] = useState(false)
+  const [premiumSubscriptions, setPremiumSubscriptions] = useState<AdminPremiumSubscriptionItem[]>([])
+  const [premiumLoading, setPremiumLoading] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -57,6 +60,16 @@ export default function Ganhos() {
   useEffect(() => {
     setPage(1)
   }, [selectedBusinessId])
+
+  useEffect(() => {
+    if (!token || !isAdmin) return
+    setPremiumLoading(true)
+    apiGet<AdminPremiumSubscriptionItem[]>('/api/admin/subscriptions/premium?limit=100', token).then((res) => {
+      setPremiumLoading(false)
+      if (res.ok && Array.isArray(res.data)) setPremiumSubscriptions(res.data)
+      else setPremiumSubscriptions([])
+    })
+  }, [token, isAdmin])
 
   const hasClinic = !!selectedBusinessId
   const totalDetailCount = earningsDetail.length
@@ -100,6 +113,38 @@ export default function Ganhos() {
         </div>
         <ValueVisibilityToggle className="flex-shrink-0" />
       </div>
+
+      {isAdmin && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6">
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Registro de assinaturas premium</h2>
+            <p className="text-sm text-gray-500 mt-0.5">Clientes que assinaram o plano premium (visível apenas para administradores)</p>
+          </div>
+          <div className="p-4">
+            {premiumLoading ? (
+              <p className="text-gray-500 text-sm">Carregando...</p>
+            ) : premiumSubscriptions.length === 0 ? (
+              <p className="text-gray-500 text-sm">Nenhuma assinatura premium registrada.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {premiumSubscriptions.map((s, i) => (
+                  <li key={`${s.userId}-${i}`} className="py-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-gray-900">{s.userName || '—'}</p>
+                      <p className="text-sm text-gray-600">{s.userEmail}</p>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      <span>Início: {formatDateOnly(s.startedAt)}</span>
+                      <span className="mx-2">·</span>
+                      <span>Fim: {formatDateOnly(s.endsAt)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       {!hasClinic ? (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-800">

@@ -183,4 +183,43 @@ public class EmailSender : IEmailSender
             throw;
         }
     }
+
+    public async Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
+        {
+            _logger.LogInformation("E-mail não configurado. Suporte: {Name} ({Email}): {Message}", userName, userEmail, message);
+            await Task.CompletedTask;
+            return;
+        }
+
+        var smtpUser = _settings.SmtpUser?.Trim() ?? "";
+        var smtpPassword = _settings.SmtpPassword ?? "";
+        if (string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPassword))
+        {
+            await Task.CompletedTask;
+            return;
+        }
+
+        try
+        {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
+            using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
+            {
+                EnableSsl = _settings.SmtpPort == 587 || _settings.SmtpPort == 465,
+                UseDefaultCredentials = false,
+                Credentials = new NetworkCredential(smtpUser, smtpPassword)
+            };
+            var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? smtpUser : _settings.FromEmail.Trim();
+            var body = SupportRequestEmailContent.BuildPlainTextBody(userName, userEmail, message, pageUrl);
+            var mail = new MailMessage(from, toEmail, SupportRequestEmailContent.Subject, body);
+            mail.BodyEncoding = System.Text.Encoding.UTF8;
+            await client.SendMailAsync(mail, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Falha ao enviar e-mail de suporte para {Email}", toEmail);
+            throw;
+        }
+    }
 }

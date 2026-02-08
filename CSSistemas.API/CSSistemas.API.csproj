@@ -23,11 +23,10 @@
     </Content>
   </ItemGroup>
 
-  <!-- A cada build da API: compila o frontend e copia dist para wwwroot (Windows: robocopy; Linux: cp para Railway etc.). -->
+  <!-- A cada build da API: compila o frontend e copia dist para wwwroot (atualização automática). -->
   <Target Name="BuildAndDeployFrontend" BeforeTargets="Build" Condition="Exists('$(ProjectDir)..\cssistemas-web\package.json')">
     <Exec Command="npm run build" WorkingDirectory="$(ProjectDir)..\cssistemas-web" />
-    <Exec Command="robocopy &quot;$(ProjectDir)..\cssistemas-web\dist&quot; &quot;$(ProjectDir)wwwroot&quot; /MIR /NFL /NDL /NJH /NJS" IgnoreExitCode="true" Condition="'$(OS)'=='Windows_NT'" />
-    <Exec Command="mkdir -p wwwroot &amp;&amp; cp -r ../cssistemas-web/dist/* wwwroot/" WorkingDirectory="$(ProjectDir)" IgnoreExitCode="true" Condition="'$(OS)'!='Windows_NT'" />
+    <Exec Command="robocopy &quot;$(ProjectDir)..\cssistemas-web\dist&quot; &quot;$(ProjectDir)wwwroot&quot; /MIR /NFL /NDL /NJH /NJS" IgnoreExitCode="true" />
   </Target>
 
 </Project>

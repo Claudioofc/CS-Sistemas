@@ -70,8 +70,8 @@ O frontend estará disponível em:
 ### 3. Configuração e banco
 
 - Crie o banco PostgreSQL e execute os scripts em **CSSistemas.API/Scripts** (001 a 018) na ordem.
-- **Em desenvolvimento:** copie `CSSistemas.API/appsettings.Development.example.json` para `appsettings.Development.json` e preencha (connection string, JWT, admin, e-mail, pagamento). Não commite esse arquivo.
-- **Em produção:** use variáveis de ambiente para connection string, JWT, admin e chaves de pagamento.
+- **Em desenvolvimento:** copie `appsettings.Development.example.json` para `appsettings.Development.json` (na pasta CSSistemas.API) e preencha: **ConnectionStrings:DefaultConnection** (senha do Postgres), **Admin:NotificationEmail** (e-mail que recebe Fale conosco e notificações), **Email** (Resend ou SMTP), **Payment:MercadoPago** se usar. **Não commite** `appsettings.Development.json` — ele está no `.gitignore`.
+- **Em produção:** copie `appsettings.Production.example.json` para `appsettings.Production.json` e preencha, ou use variáveis de ambiente. Não commite `appsettings.Production.json`.
 
 ## Estrutura do Projeto
 
@@ -184,8 +184,9 @@ CSSistemas/
 - Senhas com hash seguro
 - Validação de entrada (FluentValidation)
 - CORS configurado para desenvolvimento
-- **Dados sensíveis protegidos:**
-  - O repositório contém apenas **placeholders** em `appsettings.json` (sem senhas, JWT ou chaves reais).
-  - Crie `appsettings.Development.json` a partir de `appsettings.Development.example.json` e preencha com suas credenciais locais. Esse arquivo **não é versionado** (está no `.gitignore`).
-  - Em produção, use variáveis de ambiente ou `appsettings.Production.json` (também ignorado pelo Git) para connection string, JWT, admin, PIX, Mercado Pago e e-mail.
-  - **Se você já commitou credenciais no passado:** altere imediatamente a senha do banco, o JWT Secret, a senha do admin e regenere chaves de API (Resend, Mercado Pago, etc.).
+
+### Dados sensíveis — seguro para subir no GitHub
+
+- **`appsettings.json`** (versionado): contém apenas placeholders (ex.: `SUA_SENHA`, `NotificationEmail: ""`). Nenhuma senha, e-mail real ou chave de API deve ficar aqui.
+- **`appsettings.Development.json`** e **`appsettings.Production.json`**: estão no **`.gitignore`** e **nunca são commitados**. Copie dos arquivos **`.example`**, preencha localmente e não faça commit desses arquivos.
+- **Antes de dar push:** confira com `git status` que nenhum `appsettings.Development.json` ou `appsettings.Production.json` está sendo enviado. Se já tiver commitado credenciais no passado, altere as senhas e chaves (banco, JWT, admin, Resend, Mercado Pago) e use os exemplos daqui em diante.

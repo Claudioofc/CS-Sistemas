@@ -1,4 +1,5 @@
 using CSSistemas.Domain.Entities;
+using CSSistemas.Domain.Enums;
 
 namespace CSSistemas.Application.Interfaces;
 
@@ -13,6 +14,9 @@ public interface ISubscriptionRepository
 
     /// <summary>Retorna a assinatura ativa de cada usuário (para painel admin). Um por UserId, a mais recente por usuário.</summary>
     Task<IReadOnlyList<Subscription>> GetActiveByUserIdsAsync(IEnumerable<Guid> userIds, CancellationToken cancellationToken = default);
+
+    /// <summary>Lista assinaturas premium (Monthly) com User, ordenadas por StartedAt desc. Apenas admin.</summary>
+    Task<IReadOnlyList<Subscription>> GetPremiumSubscriptionsOrderedByStartedAtAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task AddAsync(Subscription subscription, CancellationToken cancellationToken = default);
 }

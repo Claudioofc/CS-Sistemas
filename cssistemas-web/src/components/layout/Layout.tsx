@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { ValuesVisibilityProvider } from '../../contexts/ValuesVisibilityContext'
-import { apiGet, apiPatch, getProfilePhotoUrl } from '../../api/client'
+import { apiGet, apiPatch, apiPostWithAuth, getProfilePhotoUrl } from '../../api/client'
 import { APP_NAME, ROUTES, FALLBACK_USER_NAME } from '../../constants'
 import { getFirstName, formatDateAndTime } from '../../utils/format'
 import { playNotificationBeep, warmupNotificationSound } from '../../utils/sound'
@@ -45,6 +45,11 @@ export default function Layout() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const previousNotificationCountRef = useRef<number | null>(null)
+  const [supportModalOpen, setSupportModalOpen] = useState(false)
+  const [supportMessage, setSupportMessage] = useState('')
+  const [supportSubmitting, setSupportSubmitting] = useState(false)
+  const [supportError, setSupportError] = useState<string | null>(null)
+  const [supportSuccess, setSupportSuccess] = useState(false)
 
   const fetchNotifications = useCallback(async () => {
     if (!token) return
@@ -65,6 +70,36 @@ export default function Layout() {
     if (!token) return
     const res = await apiPatch<Record<string, never>, unknown>(`/api/notifications/${id}/read`, {}, token)
     if (res.ok) setNotifications((prev) => prev.filter((n) => n.id !== id))
+  }
+
+  async function handleSupportSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!token || !supportMessage.trim()) return
+    setSupportError(null)
+    setSupportSubmitting(true)
+    const res = await apiPostWithAuth<{ message: string; pageUrl?: string }, { message?: string }>(
+      '/api/support/contact',
+      { message: supportMessage.trim(), pageUrl: typeof window !== 'undefined' ? window.location.href : undefined },
+      token
+    )
+    setSupportSubmitting(false)
+    if (res.ok) {
+      setSupportSuccess(true)
+      setSupportMessage('')
+      setTimeout(() => { setSupportModalOpen(false); setSupportSuccess(false) }, 2000)
+    } else {
+      const err = res.error
+      const msg = err && ('message' in err ? err.message : (err as { mensagem?: string }).mensagem)
+      setSupportError(msg ?? 'Erro ao enviar. Tente novamente.')
+    }
+  }
+
+  function openSupportModal() {
+    setSupportModalOpen(true)
+    setSupportMessage('')
+    setSupportError(null)
+    setSupportSuccess(false)
+    closeSidebar()
   }
 
   useEffect(() => {
@@ -156,11 +191,19 @@ export default function Layout() {
             )
           })}
           <div className="pt-4 mt-4 border-t border-white/20">
+            <button
+              type="button"
+              onClick={openSupportModal}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition min-h-[44px] items-center w-full text-left cursor-pointer"
+            >
+              <Icon d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              Fale conosco
+            </button>
             {!user?.isAdmin && (
               <Link
                 to={premiumPath.path}
                 onClick={closeSidebar}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition min-h-[44px] items-center"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition min-h-[44px] items-center mt-0.5"
               >
                 <Icon d={premiumPath.icon} />
                 {premiumPath.label}
@@ -335,6 +378,55 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Modal Fale conosco */}
+      {supportModalOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" aria-hidden onClick={() => !supportSubmitting && setSupportModalOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 pointer-events-auto" role="dialog" aria-labelledby="support-modal-title" aria-modal="true">
+              <h2 id="support-modal-title" className="text-lg font-semibold text-gray-900 mb-4">Fale conosco</h2>
+              {supportSuccess ? (
+                <p className="text-gray-600">Mensagem enviada. Entraremos em contato em breve.</p>
+              ) : (
+                <form onSubmit={handleSupportSubmit}>
+                  <label htmlFor="support-message" className="block text-sm font-medium text-gray-700 mb-1">Mensagem</label>
+                  <textarea
+                    id="support-message"
+                    value={supportMessage}
+                    onChange={(e) => setSupportMessage(e.target.value)}
+                    placeholder="Descreva o problema ou dúvida..."
+                    required
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-gray-900 placeholder-gray-500"
+                    disabled={supportSubmitting}
+                  />
+                  {supportError && (
+                    <p className="mt-2 text-sm text-red-600" role="alert">{supportError}</p>
+                  )}
+                  <div className="mt-4 flex gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setSupportModalOpen(false)}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                      disabled={supportSubmitting}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={supportSubmitting || !supportMessage.trim()}
+                      className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {supportSubmitting ? 'Enviando...' : 'Enviar'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
     </ValuesVisibilityProvider>
   )

@@ -14,4 +14,7 @@ public interface IEmailSender
 
     /// <summary>Aviso para o admin: novo usuário se cadastrou no sistema.</summary>
     Task SendNewUserRegisteredAsync(string toEmail, string newUserName, string newUserEmail, CancellationToken cancellationToken = default);
+
+    /// <summary>Mensagem de suporte: cliente reporta problema/erro; envia para o e-mail do admin.</summary>
+    Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, CancellationToken cancellationToken = default);
 }

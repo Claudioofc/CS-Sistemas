@@ -23,9 +23,10 @@ npm-debug.log*
 # User secrets (dotnet user-secrets)
 secrets.json
 
-# Dados sensíveis — NUNCA versionar
+# Dados sensíveis — NUNCA versionar (copie dos arquivos .example e preencha localmente)
 **/appsettings.Development.json
 **/appsettings.Production.json
+**/appsettings.*.local.json
 **/.env
 .env
 .env.local

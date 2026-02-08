@@ -92,6 +92,21 @@ public class AdminController : ControllerBase
         var list = await _clientRepository.GetByBusinessIdAsync(businessId, onlyActive: true, cancellationToken);
         return Ok(list.Select(ClientResponseMapper.ToResponse));
     }
+
+    /// <summary>Registro de assinaturas premium (quem assinou e quando). Apenas admin.</summary>
+    [HttpGet("subscriptions/premium")]
+    [ProducesResponseType(typeof(IReadOnlyList<AdminPremiumSubscriptionResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListPremiumSubscriptions([FromQuery] int limit = 100, CancellationToken cancellationToken = default)
+    {
+        var list = await _subscriptionRepository.GetPremiumSubscriptionsOrderedByStartedAtAsync(Math.Clamp(limit, 1, 500), cancellationToken);
+        var response = list.Select(s => new AdminPremiumSubscriptionResponse(
+            s.UserId,
+            s.User?.Name ?? "",
+            s.User?.Email ?? "",
+            s.StartedAt,
+            s.EndsAt)).ToList();
+        return Ok(response);
+    }
 }
 
 /// <summary>Resposta de cliente para painel admin (todos os cadastros, premium e gratuito).</summary>
@@ -99,3 +114,6 @@ public record AdminUserResponse(Guid Id, string Email, string Name, DateTime Cre
 
 /// <summary>Resposta de negócio para painel admin (lista todas as clínicas).</summary>
 public record AdminBusinessResponse(Guid Id, Guid UserId, string OwnerName, string Name, BusinessType BusinessType, string? PublicSlug, string? WhatsAppPhone, DateTime CreatedAt, DateTime? UpdatedAt);
+
+/// <summary>Registro de assinatura premium para painel admin (quem assinou e quando).</summary>
+public record AdminPremiumSubscriptionResponse(Guid UserId, string UserName, string UserEmail, DateTime StartedAt, DateTime EndsAt);

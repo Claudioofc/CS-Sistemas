@@ -216,4 +216,45 @@ public class ResendEmailSender : IEmailSender
             throw;
         }
     }
+
+    public async Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, CancellationToken cancellationToken = default)
+    {
+        var apiKey = _settings.ResendApiKey?.Trim();
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            _logger.LogWarning("Resend configurado mas ResendApiKey vazio. Suporte: {User} ({Email})", userName, userEmail);
+            await Task.CompletedTask;
+            return;
+        }
+
+        var from = string.IsNullOrWhiteSpace(_settings.FromEmail)
+            ? $"CS Sistemas <onboarding@resend.dev>"
+            : $"{_settings.FromName} <{_settings.FromEmail}>";
+
+        var body = new
+        {
+            from,
+            to = new[] { toEmail },
+            subject = SupportRequestEmailContent.Subject,
+            html = SupportRequestEmailContent.BuildHtmlBody(userName, userEmail, message, pageUrl)
+        };
+
+        try
+        {
+            using var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + apiKey);
+            var response = await client.PostAsJsonAsync(ResendApiUrl, body, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Resend API erro {StatusCode}: {Body}", response.StatusCode, errorBody);
+                throw new InvalidOperationException($"Falha ao enviar e-mail: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Falha ao enviar e-mail de suporte para {Email} via Resend", toEmail);
+            throw;
+        }
+    }
 }

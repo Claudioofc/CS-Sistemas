@@ -13,12 +13,17 @@ public sealed record EmailWorkItem(
     string? CancelLink,
     string? CancellationReason,
     string? NewUserRegisteredName = null,
-    string? NewUserRegisteredEmail = null);
+    string? NewUserRegisteredEmail = null,
+    string? SupportRequestUserName = null,
+    string? SupportRequestUserEmail = null,
+    string? SupportRequestMessage = null,
+    string? SupportRequestPageUrl = null);
 
 public enum EmailWorkItemKind
 {
     PasswordReset,
     AppointmentConfirmation,
     AppointmentCancelledByProfessional,
-    NewUserRegistered
+    NewUserRegistered,
+    SupportRequest
 }

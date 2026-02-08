@@ -1,0 +1,101 @@
+@CSSistemas.API_HostAddress = http://localhost:5264
+@Token = seu_jwt_aqui
+
+### Verificar conexão com PostgreSQL
+GET {{CSSistemas.API_HostAddress}}/api/health/db
+Accept: application/json
+
+###
+
+### Registrar usuário (testa banco)
+POST {{CSSistemas.API_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "teste@cs.com",
+  "password": "Teste123!",
+  "name": "Teste"
+}
+
+###
+
+### Login (use o token retornado em @Token)
+# POST {{CSSistemas.API_HostAddress}}/api/auth/login
+# Content-Type: application/json
+# { "email": "teste@cs.com", "password": "Teste123!" }
+
+###
+
+### Esqueci minha senha (envia e-mail com link; não revela se o e-mail existe)
+POST {{CSSistemas.API_HostAddress}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "teste@cs.com"
+}
+
+###
+
+### Redefinir senha (token recebido por e-mail)
+# POST {{CSSistemas.API_HostAddress}}/api/auth/reset-password
+# Content-Type: application/json
+# { "token": "token_do_email", "newPassword": "NovaSenha123!" }
+
+###
+
+### --- Negócios (requer Authorization: Bearer {{Token}}) ---
+# GET {{CSSistemas.API_HostAddress}}/api/business
+# Authorization: Bearer {{Token}}
+
+# GET {{CSSistemas.API_HostAddress}}/api/business/{id}
+# Authorization: Bearer {{Token}}
+
+# POST {{CSSistemas.API_HostAddress}}/api/business
+# Authorization: Bearer {{Token}}
+# Content-Type: application/json
+# { "name": "Clínica Odonto", "businessType": 0, "publicSlug": "clinica-odonto" }
+
+# PUT {{CSSistemas.API_HostAddress}}/api/business/{id}
+# Authorization: Bearer {{Token}}
+# Content-Type: application/json
+# { "name": "Clínica Odonto Atualizada", "businessType": 0, "publicSlug": "clinica-odonto" }
+
+###
+
+### --- Serviços (requer Authorization) ---
+# GET {{CSSistemas.API_HostAddress}}/api/services/by-business/{businessId}
+# Authorization: Bearer {{Token}}
+
+# GET {{CSSistemas.API_HostAddress}}/api/services/{id}?businessId={businessId}
+# Authorization: Bearer {{Token}}
+
+# POST {{CSSistemas.API_HostAddress}}/api/services
+# Authorization: Bearer {{Token}}
+# Content-Type: application/json
+# { "businessId": "guid", "name": "Consulta", "durationMinutes": 30, "price": 150.00 }
+
+# PUT {{CSSistemas.API_HostAddress}}/api/services/{id}?businessId={businessId}
+# Authorization: Bearer {{Token}}
+# Content-Type: application/json
+# { "businessId": "guid", "name": "Consulta", "durationMinutes": 45, "price": 180.00 }
+
+###
+
+### --- Agendamentos (requer Authorization) ---
+# GET {{CSSistemas.API_HostAddress}}/api/appointments/by-business/{businessId}?from=2025-02-01&to=2025-02-28
+# Authorization: Bearer {{Token}}
+
+# GET {{CSSistemas.API_HostAddress}}/api/appointments/{id}?businessId={businessId}
+# Authorization: Bearer {{Token}}
+
+# POST {{CSSistemas.API_HostAddress}}/api/appointments
+# Authorization: Bearer {{Token}}
+# Content-Type: application/json
+# { "businessId": "guid", "serviceId": "guid", "clientName": "João", "scheduledAt": "2025-02-15T14:00:00Z", "clientPhone": "11999999999", "clientEmail": "joao@email.com" }
+
+# PATCH {{CSSistemas.API_HostAddress}}/api/appointments/{id}/status?businessId={businessId}
+# Authorization: Bearer {{Token}}
+# Content-Type: application/json
+# { "status": 1 }
+
+###

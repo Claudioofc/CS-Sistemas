@@ -12,6 +12,15 @@ export type AdminUserItem = {
   subscriptionLabel?: string
 }
 
+/** Resposta de assinatura premium para painel admin (registro de quem assinou e quando). */
+export type AdminPremiumSubscriptionItem = {
+  userId: string
+  userName: string
+  userEmail: string
+  startedAt: string
+  endsAt: string
+}
+
 export type BusinessItem = {
   id: string
   name: string
