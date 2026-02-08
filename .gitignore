@@ -1,0 +1,27 @@
+# Build / IDE
+[Bb]in/
+[Oo]bj/
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# .NET
+*.log
+*.pdb
+[Dd]ebug/
+[Rr]elease/
+project.lock.json
+project.fragment.lock.json
+
+# Node (cssistemas-web)
+node_modules/
+npm-debug.log*
+
+# Segredos (opcional: descomente se usar appsettings.Production.json com dados reais)
+# **/appsettings.Production.json
+
+# User secrets (dotnet user-secrets)
+secrets.json

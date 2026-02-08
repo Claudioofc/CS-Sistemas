@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.21" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CSSistemas.Application\CSSistemas.Application.csproj" />
+    <ProjectReference Include="..\CSSistemas.Infrastructure\CSSistemas.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Scripts\**\*.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- A cada build da API: compila o frontend e copia dist para wwwroot (Windows: robocopy; Linux: cp para Railway etc.). -->
+  <Target Name="BuildAndDeployFrontend" BeforeTargets="Build" Condition="Exists('$(ProjectDir)..\cssistemas-web\package.json')">
+    <Exec Command="npm run build" WorkingDirectory="$(ProjectDir)..\cssistemas-web" />
+    <Exec Command="robocopy &quot;$(ProjectDir)..\cssistemas-web\dist&quot; &quot;$(ProjectDir)wwwroot&quot; /MIR /NFL /NDL /NJH /NJS" IgnoreExitCode="true" Condition="'$(OS)'=='Windows_NT'" />
+    <Exec Command="mkdir -p wwwroot &amp;&amp; cp -r ../cssistemas-web/dist/* wwwroot/" WorkingDirectory="$(ProjectDir)" IgnoreExitCode="true" Condition="'$(OS)'!='Windows_NT'" />
+  </Target>
+
+</Project>
