@@ -21,6 +21,10 @@ public class User : EntityBase
     public int FailedLoginAttempts { get; protected set; }
     /// <summary>Fim do bloqueio por excesso de tentativas (UTC).</summary>
     public DateTime? LockoutEnd { get; protected set; }
+    /// <summary>Quando o usuário visualizou o banner de boas-vindas (null = ainda não viu).</summary>
+    public DateTime? WelcomeBannerSeenAt { get; protected set; }
+    /// <summary>True se o banner de boas-vindas ainda deve ser exibido (não visto).</summary>
+    public bool ShowWelcomeBanner => WelcomeBannerSeenAt == null;
 
     protected User() { }
 
@@ -116,6 +120,13 @@ public class User : EntityBase
             DocumentType = null;
             DocumentNumber = null;
         }
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Marca que o usuário visualizou o banner de boas-vindas (não exibir mais).</summary>
+    public void MarkWelcomeBannerSeen()
+    {
+        WelcomeBannerSeenAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
     }
 }
