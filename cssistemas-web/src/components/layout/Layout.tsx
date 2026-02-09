@@ -35,7 +35,7 @@ function Icon({ d }: { d: string }) {
 }
 
 export default function Layout() {
-  const { user, token, logout, subscriptionStatus } = useAuth()
+  const { user, token, logout, subscriptionStatus, dismissWelcomeBanner } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -391,6 +391,35 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Modal Boas-vindas / Como usar o sistema (apenas na primeira vez) */}
+      {user?.showWelcomeBanner && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-[60]" aria-hidden />
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full my-8 p-6" role="dialog" aria-labelledby="welcome-modal-title" aria-modal="true">
+              <h2 id="welcome-modal-title" className="text-xl font-semibold text-gray-900 mb-4">Bem-vindo ao {APP_NAME}</h2>
+              <p className="text-gray-700 mb-3">Este é o seu painel. Use-o para gerenciar agendamentos, clientes e serviços.</p>
+              <div className="space-y-3 text-sm text-gray-600">
+                <p><strong>1. Configure seu negócio</strong><br />Em <strong>Configurações</strong>, cadastre sua empresa: nome, tipo e um <strong>slug</strong> (ex.: minha-empresa). Esse slug forma o link de agendamento: <em>seusite.com/agendar/minha-empresa</em>.</p>
+                <p><strong>2. Cadastre serviços e horários</strong><br />Em <strong>Serviços</strong>, crie cada serviço (nome, duração, preço). Depois, defina os horários de funcionamento por dia da semana.</p>
+                <p><strong>3. Compartilhe o link com seus clientes</strong><br />O link de agendamento é <strong>/agendar/[seu-slug]</strong>. O cliente abre, escolhe serviço e horário e agenda sem precisar criar conta.</p>
+                <p><strong>4. Acompanhe no painel</strong><br />Em <strong>Agendamentos</strong> você vê todos os agendamentos; em <strong>Clientes</strong> mantém o cadastro; em <strong>Ganhos</strong> e <strong>Dashboard</strong> acompanha o resumo.</p>
+                <p><strong>5. Dúvidas?</strong><br />Use <strong>Fale conosco</strong> no menu para enviar uma mensagem ao suporte.</p>
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => dismissWelcomeBanner()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg"
+                >
+                  Entendi
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal Fale conosco */}
       {supportModalOpen && (

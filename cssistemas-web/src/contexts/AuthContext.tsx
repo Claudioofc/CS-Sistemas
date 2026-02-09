@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { apiGet, apiPatch, apiPost } from '../api/client'
+import { apiGet, apiPatch, apiPost, apiPostWithAuth } from '../api/client'
 
 const TOKEN_KEY = 'cssistemas_token'
 
@@ -14,6 +14,7 @@ export type User = {
   documentType: DocumentType | null
   documentNumber: string | null
   isAdmin: boolean
+  showWelcomeBanner: boolean
 }
 
 export type RegisterResult = { ok: true } | { ok: false; message: string; errors?: { campo: string; mensagem: string }[] }
@@ -37,6 +38,7 @@ type AuthContextType = {
   fetchUser: () => Promise<void>
   setUser: (u: User | null) => void
   updateProfile: (data: { name: string; profilePhotoUrl?: string | null; documentType?: DocumentType | null; documentNumber?: string | null }) => Promise<{ ok: boolean; message?: string; errors?: { campo: string; mensagem: string }[] }>
+  dismissWelcomeBanner: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -73,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false)
       return
     }
-    const res = await apiGet<{ id: string; email: string; name: string; profilePhotoUrl: string | null; documentType?: number | null; documentNumber?: string | null; isAdmin?: boolean }>('/api/auth/me', t)
+    const res = await apiGet<{ id: string; email: string; name: string; profilePhotoUrl: string | null; documentType?: number | null; documentNumber?: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean }>('/api/auth/me', t)
     if (res.ok) {
       setToken(t)
       setUser({
@@ -84,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         documentType: res.data.documentType != null ? (res.data.documentType as DocumentType) : null,
         documentNumber: res.data.documentNumber ?? null,
         isAdmin: res.data.isAdmin ?? false,
+        showWelcomeBanner: res.data.showWelcomeBanner ?? false,
       })
     } else {
       setToken(null)
@@ -128,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       documentType: null,
       documentNumber: null,
       isAdmin: false,
+      showWelcomeBanner: true,
     })
     await fetchUser()
     return { ok: true }
@@ -163,6 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         documentType: null,
         documentNumber: null,
         isAdmin: false,
+        showWelcomeBanner: true,
       })
       await fetchUser()
       return { ok: true }
@@ -171,29 +176,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [fetchUser])
 
-  const updateProfile = useCallback(async (data: { name: string; profilePhotoUrl?: string | null; documentType?: DocumentType | null; documentNumber?: string | null }) => {
+  const updateProfile = useCallback(async (payload: { name: string; profilePhotoUrl?: string | null; documentType?: DocumentType | null; documentNumber?: string | null }) => {
     const t = localStorage.getItem(TOKEN_KEY)
     if (!t) return { ok: false, message: 'Não autenticado.' }
-    const res = await apiPatch<typeof data, { id: string; email: string; name: string; profilePhotoUrl: string | null; documentType: number | null; documentNumber: string | null }>(
+    type ProfileResponse = { id: string; email: string; name: string; profilePhotoUrl: string | null; documentType: number | null; documentNumber: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean }
+    const res = await apiPatch<typeof payload, ProfileResponse>(
       '/api/auth/profile',
-      { name: data.name, profilePhotoUrl: data.profilePhotoUrl ?? null, documentType: data.documentType ?? null, documentNumber: data.documentNumber ?? null },
+      { name: payload.name, profilePhotoUrl: payload.profilePhotoUrl ?? null, documentType: payload.documentType ?? null, documentNumber: payload.documentNumber ?? null },
       t
     )
     if (!res.ok) {
       const err = res.error as { mensagem?: string; message?: string; erros?: { campo: string; mensagem: string }[] }
       return { ok: false, message: err.mensagem ?? err.message ?? 'Erro ao atualizar.', errors: err.erros }
     }
+    const profile = res.data
     setUser({
-      id: res.data.id,
-      email: res.data.email,
-      name: res.data.name,
-      profilePhotoUrl: res.data.profilePhotoUrl ?? null,
-      documentType: res.data.documentType != null ? (res.data.documentType as DocumentType) : null,
-      documentNumber: res.data.documentNumber ?? null,
-      isAdmin: (res.data as { isAdmin?: boolean }).isAdmin ?? false,
+      id: profile.id,
+      email: profile.email,
+      name: profile.name,
+      profilePhotoUrl: profile.profilePhotoUrl ?? null,
+      documentType: profile.documentType != null ? (profile.documentType as DocumentType) : null,
+      documentNumber: profile.documentNumber ?? null,
+      isAdmin: profile.isAdmin ?? false,
+      showWelcomeBanner: profile.showWelcomeBanner ?? false,
     })
     return { ok: true }
   }, [])
+
+  const dismissWelcomeBanner = useCallback(async () => {
+    const t = localStorage.getItem(TOKEN_KEY)
+    if (!t || !user) return
+    const res = await apiPostWithAuth<Record<string, never>, unknown>('/api/auth/welcome-banner-dismissed', {}, t)
+    if (res.ok && user) {
+      setUser({ ...user, showWelcomeBanner: false })
+    }
+  }, [user])
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY)
@@ -203,7 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, subscriptionStatus, fetchSubscriptionStatus, login, register, logout, fetchUser, setUser, updateProfile }}>
+    <AuthContext.Provider value={{ token, user, isLoading, subscriptionStatus, fetchSubscriptionStatus, login, register, logout, fetchUser, setUser, updateProfile, dismissWelcomeBanner }}>
       {children}
     </AuthContext.Provider>
   )
