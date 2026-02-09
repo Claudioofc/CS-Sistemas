@@ -190,3 +190,4 @@ CSSistemas/
 - **`appsettings.json`** (versionado): contém apenas placeholders (ex.: `SUA_SENHA`, `NotificationEmail: ""`). Nenhuma senha, e-mail real ou chave de API deve ficar aqui.
 - **`appsettings.Development.json`** e **`appsettings.Production.json`**: estão no **`.gitignore`** e **nunca são commitados**. Copie dos arquivos **`.example`**, preencha localmente e não faça commit desses arquivos.
 - **Antes de dar push:** confira com `git status` que nenhum `appsettings.Development.json` ou `appsettings.Production.json` está sendo enviado. Se já tiver commitado credenciais no passado, altere as senhas e chaves (banco, JWT, admin, Resend, Mercado Pago) e use os exemplos daqui em diante.
+

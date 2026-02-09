@@ -71,3 +71,4 @@ O cliente paga com **qualquer cartão** (crédito ou débito, Visa, Mastercard, 
 ---
 
 **Resumo:** Ajuste `appsettings.Production.json` (ou variáveis de ambiente), garanta a connection string do PostgreSQL, defina `BaseBookingUrl` para a URL real do sistema e, se for usar WhatsApp/IA, configure as chaves e habilite os módulos.
+

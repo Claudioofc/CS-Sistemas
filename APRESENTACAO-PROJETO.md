@@ -98,3 +98,4 @@ README.md (visão geral, como rodar), DEPLOY.md (checklist), ALTO-VOLUME.md (rat
 - **Produção:** preparado para alto volume (rate limit, pool, fila de e-mail, Redis opcional, cache de estáticos); métricas documentadas para monitorar suporte e velocidade.
 
 O sistema está completo, organizado e pronto para uso e evolução em ambiente single ou multi-instância (com Redis).
+
