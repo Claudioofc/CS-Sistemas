@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net;
 using System.Net.Mail;
 using CSSistemas.Application.Configuration;
@@ -184,7 +185,7 @@ public class EmailSender : IEmailSender
         }
     }
 
-    public async Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, CancellationToken cancellationToken = default)
+    public async Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, byte[]? attachment = null, string? attachmentFileName = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
         {
@@ -214,6 +215,11 @@ public class EmailSender : IEmailSender
             var body = SupportRequestEmailContent.BuildPlainTextBody(userName, userEmail, message, pageUrl);
             var mail = new MailMessage(from, toEmail, SupportRequestEmailContent.Subject, body);
             mail.BodyEncoding = System.Text.Encoding.UTF8;
+            if (attachment != null && !string.IsNullOrWhiteSpace(attachmentFileName))
+            {
+                using var attachmentStream = new MemoryStream(attachment);
+                mail.Attachments.Add(new Attachment(attachmentStream, attachmentFileName));
+            }
             await client.SendMailAsync(mail, cancellationToken);
         }
         catch (Exception ex)

@@ -48,7 +48,7 @@ public sealed class EmailQueueHostedService : BackgroundService
                         await sender.SendNewUserRegisteredAsync(item.ToEmail!, item.NewUserRegisteredName!, item.NewUserRegisteredEmail!, stoppingToken);
                         break;
                     case EmailWorkItemKind.SupportRequest:
-                        await sender.SendSupportRequestAsync(item.ToEmail!, item.SupportRequestUserName!, item.SupportRequestUserEmail!, item.SupportRequestMessage!, item.SupportRequestPageUrl, stoppingToken);
+                        await sender.SendSupportRequestAsync(item.ToEmail!, item.SupportRequestUserName!, item.SupportRequestUserEmail!, item.SupportRequestMessage!, item.SupportRequestPageUrl, item.SupportRequestAttachment, item.SupportRequestAttachmentFileName, stoppingToken);
                         break;
                 }
             }

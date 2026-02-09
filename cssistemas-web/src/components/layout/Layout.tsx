@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { ValuesVisibilityProvider } from '../../contexts/ValuesVisibilityContext'
-import { apiGet, apiPatch, apiPostWithAuth, getProfilePhotoUrl } from '../../api/client'
+import { apiGet, apiPatch, getProfilePhotoUrl } from '../../api/client'
 import { APP_NAME, ROUTES, FALLBACK_USER_NAME } from '../../constants'
 import { getFirstName, formatDateAndTime } from '../../utils/format'
 import { playNotificationBeep, warmupNotificationSound } from '../../utils/sound'
@@ -47,6 +47,7 @@ export default function Layout() {
   const previousNotificationCountRef = useRef<number | null>(null)
   const [supportModalOpen, setSupportModalOpen] = useState(false)
   const [supportMessage, setSupportMessage] = useState('')
+  const [supportAttachment, setSupportAttachment] = useState<File | null>(null)
   const [supportSubmitting, setSupportSubmitting] = useState(false)
   const [supportError, setSupportError] = useState<string | null>(null)
   const [supportSuccess, setSupportSuccess] = useState(false)
@@ -77,26 +78,38 @@ export default function Layout() {
     if (!token || !supportMessage.trim()) return
     setSupportError(null)
     setSupportSubmitting(true)
-    const res = await apiPostWithAuth<{ message: string; pageUrl?: string }, { message?: string }>(
-      '/api/support/contact',
-      { message: supportMessage.trim(), pageUrl: typeof window !== 'undefined' ? window.location.href : undefined },
-      token
-    )
+
+    const formData = new FormData()
+    formData.append('message', supportMessage.trim())
+    if (typeof window !== 'undefined') {
+      formData.append('pageUrl', window.location.href)
+    }
+    if (supportAttachment) {
+      formData.append('attachment', supportAttachment)
+    }
+
+    const res = await fetch(`${typeof window !== 'undefined' ? window.location.origin : ''}/api/support/contact`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    })
+    const data = await res.json().catch(() => ({})) as { message?: string }
     setSupportSubmitting(false)
     if (res.ok) {
       setSupportSuccess(true)
       setSupportMessage('')
+      setSupportAttachment(null)
       setTimeout(() => { setSupportModalOpen(false); setSupportSuccess(false) }, 2000)
     } else {
-      const err = res.error
-      const msg = err && ('message' in err ? err.message : (err as { mensagem?: string }).mensagem)
-      setSupportError(msg ?? 'Erro ao enviar. Tente novamente.')
+      const msg = data.message ?? 'Erro ao enviar. Tente novamente.'
+      setSupportError(msg)
     }
   }
 
   function openSupportModal() {
     setSupportModalOpen(true)
     setSupportMessage('')
+    setSupportAttachment(null)
     setSupportError(null)
     setSupportSuccess(false)
     closeSidebar()
@@ -401,6 +414,20 @@ export default function Layout() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-gray-900 placeholder-gray-500"
                     disabled={supportSubmitting}
                   />
+                  <div className="mt-3">
+                    <label htmlFor="support-attachment" className="block text-sm font-medium text-gray-700 mb-1">Anexo (opcional)</label>
+                    <input
+                      id="support-attachment"
+                      type="file"
+                      onChange={(e) => setSupportAttachment(e.target.files?.[0] ?? null)}
+                      className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-primary/90 file:cursor-pointer cursor-pointer disabled:opacity-50"
+                      disabled={supportSubmitting}
+                      accept="*/*"
+                    />
+                    {supportAttachment && (
+                      <p className="mt-1 text-xs text-gray-500">{supportAttachment.name} ({(supportAttachment.size / 1024 / 1024).toFixed(2)} MB)</p>
+                    )}
+                  </div>
                   {supportError && (
                     <p className="mt-2 text-sm text-red-600" role="alert">{supportError}</p>
                   )}

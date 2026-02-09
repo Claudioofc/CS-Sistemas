@@ -217,7 +217,7 @@ public class ResendEmailSender : IEmailSender
         }
     }
 
-    public async Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, CancellationToken cancellationToken = default)
+    public async Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, byte[]? attachment = null, string? attachmentFileName = null, CancellationToken cancellationToken = default)
     {
         var apiKey = _settings.ResendApiKey?.Trim();
         if (string.IsNullOrEmpty(apiKey))
@@ -231,12 +231,24 @@ public class ResendEmailSender : IEmailSender
             ? $"CS Sistemas <onboarding@resend.dev>"
             : $"{_settings.FromName} <{_settings.FromEmail}>";
 
+        var attachments = attachment != null && !string.IsNullOrWhiteSpace(attachmentFileName)
+            ? new[]
+            {
+                new
+                {
+                    filename = attachmentFileName,
+                    content = Convert.ToBase64String(attachment)
+                }
+            }
+            : null;
+
         var body = new
         {
             from,
             to = new[] { toEmail },
             subject = SupportRequestEmailContent.Subject,
-            html = SupportRequestEmailContent.BuildHtmlBody(userName, userEmail, message, pageUrl)
+            html = SupportRequestEmailContent.BuildHtmlBody(userName, userEmail, message, pageUrl),
+            attachments = attachments
         };
 
         try

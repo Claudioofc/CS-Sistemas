@@ -17,7 +17,9 @@ public sealed record EmailWorkItem(
     string? SupportRequestUserName = null,
     string? SupportRequestUserEmail = null,
     string? SupportRequestMessage = null,
-    string? SupportRequestPageUrl = null);
+    string? SupportRequestPageUrl = null,
+    byte[]? SupportRequestAttachment = null,
+    string? SupportRequestAttachmentFileName = null);
 
 public enum EmailWorkItemKind
 {
