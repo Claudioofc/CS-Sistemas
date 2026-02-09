@@ -37,6 +37,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.IsAdmin);
             entity.Property(e => e.FailedLoginAttempts);
             entity.Property(e => e.LockoutEnd);
+            entity.Property(e => e.WelcomeBannerSeenAt);
+            entity.Ignore(e => e.ShowWelcomeBanner);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasIndex(e => e.Email).IsUnique().HasFilter("\"IsDeleted\" = false");
             entity.HasIndex(e => new { e.DocumentType, e.DocumentNumber }).IsUnique().HasFilter("\"DocumentNumber\" IS NOT NULL AND \"IsDeleted\" = false");
