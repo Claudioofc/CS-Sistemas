@@ -18,6 +18,7 @@ public class SubscriptionRequiredMiddleware
         ("/api/auth/me", "GET"),
         ("/api/auth/profile", "PATCH"),
         ("/api/auth/profile-photo", "POST"),
+        ("/api/auth/welcome-banner-dismissed", "POST"),
         ("/api/subscription/status", "GET"),
         ("/api/plans", "GET")
     };

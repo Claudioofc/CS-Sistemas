@@ -154,7 +154,24 @@ public class AuthController : ControllerBase
         if (userId == null) return Unauthorized();
         var user = await _userRepository.GetByIdAsync(userId.Value, cancellationToken);
         if (user == null) throw CommException.NotFound("Usuário não encontrado.");
-        return Ok(new CurrentUserResponse(user.Id, user.Email, user.Name, user.ProfilePhotoUrl, user.DocumentType, user.DocumentNumber, user.IsAdmin));
+        return Ok(new CurrentUserResponse(user.Id, user.Email, user.Name, user.ProfilePhotoUrl, user.DocumentType, user.DocumentNumber, user.IsAdmin, user.ShowWelcomeBanner));
+    }
+
+    /// <summary>Marca que o usuário visualizou o banner de boas-vindas (não exibir mais).</summary>
+    [HttpPost("welcome-banner-dismissed")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> WelcomeBannerDismissed(CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        if (userId == null) return Unauthorized();
+        var user = await _userRepository.GetByIdForUpdateAsync(userId.Value, cancellationToken);
+        if (user == null) throw CommException.NotFound("Usuário não encontrado.");
+        user.MarkWelcomeBannerSeen();
+        await _userRepository.UpdateAsync(user, cancellationToken);
+        return NoContent();
     }
 
     /// <summary>Envia uma imagem como foto de perfil. Retorna a URL relativa para salvar no perfil.</summary>
@@ -221,7 +238,7 @@ public class AuthController : ControllerBase
         }
         user.UpdateProfile(request.Name, request.ProfilePhotoUrl, request.DocumentType, documentNumberOnly);
         await _userRepository.UpdateAsync(user, cancellationToken);
-        return Ok(new CurrentUserResponse(user.Id, user.Email, user.Name, user.ProfilePhotoUrl, user.DocumentType, user.DocumentNumber, user.IsAdmin));
+        return Ok(new CurrentUserResponse(user.Id, user.Email, user.Name, user.ProfilePhotoUrl, user.DocumentType, user.DocumentNumber, user.IsAdmin, user.ShowWelcomeBanner));
     }
 
 }
