@@ -5,6 +5,7 @@ Sistema completo de agendamentos para profissionais (SaaS): o profissional cadas
 ## Funcionalidades
 
 - Autenticação JWT (login, registro, recuperação e redefinição de senha por e-mail)
+- E-mail de boas-vindas ao novo cliente no e-mail cadastrado após o registro
 - CRUD de negócios, serviços, clientes e agendamentos
 - Agendamento público: link por negócio (/agendar/:slug), escolha de serviço e horário, cancelamento por link
 - Pagamentos: PIX, cartão e Mercado Pago; webhooks para confirmação

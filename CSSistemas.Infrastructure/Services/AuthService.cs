@@ -108,6 +108,8 @@ public class AuthService : IAuthService
         if (!string.IsNullOrEmpty(adminEmail))
             await _emailSender.SendNewUserRegisteredAsync(adminEmail, user.Name, user.Email, cancellationToken);
 
+        await _emailSender.SendWelcomeToNewUserAsync(user.Email, user.Name, cancellationToken);
+
         var token = GenerateToken(user.Id, user.Email, user.Name);
         var expiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiresMinutes);
         return new LoginResponse(token, user.Email, user.Name, expiresAt, user.ProfilePhotoUrl);

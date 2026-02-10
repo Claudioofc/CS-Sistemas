@@ -37,6 +37,11 @@ public sealed class QueuedEmailSender : IEmailSender
         return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.NewUserRegistered, null, null, toEmail, null, null, null, null, null, null, newUserName, newUserEmail), cancellationToken);
     }
 
+    public Task SendWelcomeToNewUserAsync(string toEmail, string userName, CancellationToken cancellationToken = default)
+    {
+        return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.NewUserWelcome, null, null, toEmail, null, null, null, null, null, null, null, null, null, null, null, null, null, null, userName), cancellationToken);
+    }
+
     public Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, byte[]? attachment = null, string? attachmentFileName = null, CancellationToken cancellationToken = default)
     {
         return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.SupportRequest, null, null, toEmail, null, null, null, null, null, null, null, null, userName, userEmail, message, pageUrl, attachment, attachmentFileName), cancellationToken);

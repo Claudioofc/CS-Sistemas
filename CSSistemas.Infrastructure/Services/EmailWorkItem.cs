@@ -19,7 +19,8 @@ public sealed record EmailWorkItem(
     string? SupportRequestMessage = null,
     string? SupportRequestPageUrl = null,
     byte[]? SupportRequestAttachment = null,
-    string? SupportRequestAttachmentFileName = null);
+    string? SupportRequestAttachmentFileName = null,
+    string? WelcomeUserName = null);
 
 public enum EmailWorkItemKind
 {
@@ -27,5 +28,6 @@ public enum EmailWorkItemKind
     AppointmentConfirmation,
     AppointmentCancelledByProfessional,
     NewUserRegistered,
+    NewUserWelcome,
     SupportRequest
 }
