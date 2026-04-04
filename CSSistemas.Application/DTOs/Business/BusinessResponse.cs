@@ -8,6 +8,5 @@ public record BusinessResponse(
     string Name,
     BusinessType BusinessType,
     string? PublicSlug,
-    string? WhatsAppPhone,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

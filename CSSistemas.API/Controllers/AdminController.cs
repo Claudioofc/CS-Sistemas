@@ -18,25 +18,59 @@ public class AdminController : ControllerBase
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly IBusinessRepository _businessRepository;
     private readonly IClientRepository _clientRepository;
+    private readonly IPlanRepository _planRepository;
+    private readonly IEmailSender _realEmailSender;
 
     public AdminController(
         IUserRepository userRepository,
         ISubscriptionRepository subscriptionRepository,
         IBusinessRepository businessRepository,
-        IClientRepository clientRepository)
+        IClientRepository clientRepository,
+        IPlanRepository planRepository,
+        [FromKeyedServices("real")] IEmailSender realEmailSender)
     {
         _userRepository = userRepository;
         _subscriptionRepository = subscriptionRepository;
         _businessRepository = businessRepository;
         _clientRepository = clientRepository;
+        _planRepository = planRepository;
+        _realEmailSender = realEmailSender;
     }
 
-    /// <summary>Lista todos os clientes do sistema (premium e gratuito). Apenas admin.</summary>
+    /// <summary>Envia e-mail de teste direto (sem fila) para diagnóstico de SMTP. Apenas admin.</summary>
+    [HttpPost("test-email")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> TestEmail([FromQuery] string to, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(to))
+            return BadRequest(new { error = "Informe o e-mail de destino via ?to=email" });
+        try
+        {
+            await _realEmailSender.SendPasswordResetAsync(to.Trim(), "https://teste-smtp-cs-sistemas", cancellationToken);
+            return Ok(new { message = $"E-mail enviado com sucesso para {to.Trim()}" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Lista clientes do sistema com busca opcional por nome ou e-mail. Apenas admin.</summary>
     [HttpGet("users")]
     [ProducesResponseType(typeof(IReadOnlyList<AdminUserResponse>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> ListUsers(CancellationToken cancellationToken)
+    public async Task<IActionResult> ListUsers([FromQuery] string? search, CancellationToken cancellationToken)
     {
         var users = await _userRepository.GetAllAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLowerInvariant();
+            users = users.Where(u =>
+                u.Name.ToLowerInvariant().Contains(term) ||
+                u.Email.ToLowerInvariant().Contains(term)).ToList();
+        }
+
         var userIds = users.Select(u => u.Id).ToList();
         var activeSubs = await _subscriptionRepository.GetActiveByUserIdsAsync(userIds, cancellationToken);
         var subByUser = activeSubs.ToDictionary(s => s.UserId, s => s.SubscriptionType);
@@ -75,7 +109,6 @@ public class AdminController : ControllerBase
             b.Name,
             b.BusinessType,
             b.PublicSlug,
-            b.WhatsAppPhone,
             b.CreatedAt,
             b.UpdatedAt)).ToList();
         return Ok(response);
@@ -93,18 +126,28 @@ public class AdminController : ControllerBase
         return Ok(list.Select(ClientResponseMapper.ToResponse));
     }
 
-    /// <summary>Registro de assinaturas premium (quem assinou e quando). Apenas admin.</summary>
+    /// <summary>Registro de assinaturas premium (quem assinou, quando e valor). Apenas admin.</summary>
     [HttpGet("subscriptions/premium")]
     [ProducesResponseType(typeof(IReadOnlyList<AdminPremiumSubscriptionResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListPremiumSubscriptions([FromQuery] int limit = 100, CancellationToken cancellationToken = default)
     {
         var list = await _subscriptionRepository.GetPremiumSubscriptionsOrderedByStartedAtAsync(Math.Clamp(limit, 1, 500), cancellationToken);
-        var response = list.Select(s => new AdminPremiumSubscriptionResponse(
-            s.UserId,
-            s.User?.Name ?? "",
-            s.User?.Email ?? "",
-            s.StartedAt,
-            s.EndsAt)).ToList();
+        var plans = await _planRepository.GetActiveAsync(cancellationToken);
+
+        var response = list.Select(s =>
+        {
+            var billingMonths = (int)Math.Round((s.EndsAt - s.StartedAt).TotalDays / 30.0);
+            var plan = plans.OrderBy(p => Math.Abs(p.BillingIntervalMonths - billingMonths)).FirstOrDefault();
+            return new AdminPremiumSubscriptionResponse(
+                s.UserId,
+                s.User?.Name ?? "",
+                s.User?.Email ?? "",
+                s.StartedAt,
+                s.EndsAt,
+                plan?.Name ?? "Premium",
+                plan?.Price ?? 0);
+        }).ToList();
+
         return Ok(response);
     }
 }
@@ -113,7 +156,7 @@ public class AdminController : ControllerBase
 public record AdminUserResponse(Guid Id, string Email, string Name, DateTime CreatedAt, bool IsAdmin, string SubscriptionLabel);
 
 /// <summary>Resposta de negócio para painel admin (lista todas as clínicas).</summary>
-public record AdminBusinessResponse(Guid Id, Guid UserId, string OwnerName, string Name, BusinessType BusinessType, string? PublicSlug, string? WhatsAppPhone, DateTime CreatedAt, DateTime? UpdatedAt);
+public record AdminBusinessResponse(Guid Id, Guid UserId, string OwnerName, string Name, BusinessType BusinessType, string? PublicSlug, DateTime CreatedAt, DateTime? UpdatedAt);
 
-/// <summary>Registro de assinatura premium para painel admin (quem assinou e quando).</summary>
-public record AdminPremiumSubscriptionResponse(Guid UserId, string UserName, string UserEmail, DateTime StartedAt, DateTime EndsAt);
+/// <summary>Registro de assinatura premium para painel admin (quem assinou, quando e valor do plano).</summary>
+public record AdminPremiumSubscriptionResponse(Guid UserId, string UserName, string UserEmail, DateTime StartedAt, DateTime EndsAt, string PlanName, decimal Price);

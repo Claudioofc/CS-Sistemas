@@ -68,7 +68,7 @@ public class AuthService : IAuthService
 
         user.ResetFailedLogins();
         await _userRepository.UpdateAsync(user, cancellationToken);
-        var jwt = GenerateToken(user.Id, user.Email, user.Name);
+        var jwt = GenerateToken(user.Id, user.Email, user.Name, user.IsAdmin);
         var expiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiresMinutes);
         return new LoginSuccessResult(new LoginResponse(jwt, user.Email, user.Name, expiresAt, user.ProfilePhotoUrl));
     }
@@ -110,12 +110,12 @@ public class AuthService : IAuthService
 
         await _emailSender.SendWelcomeToNewUserAsync(user.Email, user.Name, cancellationToken);
 
-        var token = GenerateToken(user.Id, user.Email, user.Name);
+        var token = GenerateToken(user.Id, user.Email, user.Name, user.IsAdmin);
         var expiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiresMinutes);
         return new LoginResponse(token, user.Email, user.Name, expiresAt, user.ProfilePhotoUrl);
     }
 
-    private string GenerateToken(Guid userId, string email, string name)
+    private string GenerateToken(Guid userId, string email, string name, bool isAdmin = false)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -125,7 +125,8 @@ public class AuthService : IAuthService
             new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, email),
             new Claim(JwtRegisteredClaimNames.GivenName, name),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new Claim("isAdmin", isAdmin ? "true" : "false")
         };
 
         var token = new JwtSecurityToken(

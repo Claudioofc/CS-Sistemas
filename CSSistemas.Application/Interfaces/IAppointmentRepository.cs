@@ -19,4 +19,6 @@ public interface IAppointmentRepository
     Task UpdateAsync(Appointment appointment, CancellationToken cancellationToken = default);
     /// <summary>Soft delete: marca como excluído (não remove do banco).</summary>
     Task<bool> SoftDeleteAsync(Guid id, Guid businessId, CancellationToken cancellationToken = default);
+    /// <summary>Agendamentos futuros (Pending/Confirmed, com e-mail, sem ReminderSentAt) no intervalo [from, to] para envio de lembrete.</summary>
+    Task<IReadOnlyList<Appointment>> GetUpcomingWithoutReminderAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default);
 }

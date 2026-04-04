@@ -12,13 +12,15 @@ export type AdminUserItem = {
   subscriptionLabel?: string
 }
 
-/** Resposta de assinatura premium para painel admin (registro de quem assinou e quando). */
+/** Resposta de assinatura premium para painel admin (registro de quem assinou, quando e valor). */
 export type AdminPremiumSubscriptionItem = {
   userId: string
   userName: string
   userEmail: string
   startedAt: string
   endsAt: string
+  planName: string
+  price: number
 }
 
 export type BusinessItem = {
@@ -26,5 +28,4 @@ export type BusinessItem = {
   name: string
   businessType: number
   publicSlug?: string | null
-  whatsAppPhone?: string | null
 }

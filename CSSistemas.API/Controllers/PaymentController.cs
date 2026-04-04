@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CSSistemas.API.Extensions;
@@ -5,8 +7,8 @@ using CSSistemas.Application.Configuration;
 using CSSistemas.Application.Exceptions;
 using CSSistemas.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using QRCoder;
 
 namespace CSSistemas.API.Controllers;
 
@@ -19,20 +21,17 @@ public class PaymentController : ControllerBase
     private readonly IPlanRepository _planRepository;
     private readonly IUserRepository _userRepository;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IWebHostEnvironment _env;
 
     public PaymentController(
         Microsoft.Extensions.Options.IOptions<PaymentSettings> payment,
         IPlanRepository planRepository,
         IUserRepository userRepository,
-        IHttpClientFactory httpClientFactory,
-        IWebHostEnvironment env)
+        IHttpClientFactory httpClientFactory)
     {
         _payment = payment.Value;
         _planRepository = planRepository;
         _userRepository = userRepository;
         _httpClientFactory = httpClientFactory;
-        _env = env;
     }
 
     private static bool HasValidMercadoPagoToken(string token)
@@ -40,6 +39,67 @@ public class PaymentController : ControllerBase
         return token.Length > 20
             && !token.Contains("ACCESS_TOKEN_AQUI")
             && !token.Contains("COLE_SEU");
+    }
+
+    private bool HasStaticPixConfigured()
+    {
+        var pix = _payment.Pix;
+        return !string.IsNullOrWhiteSpace(pix.Key)
+            && !string.IsNullOrWhiteSpace(pix.MerchantName)
+            && !string.IsNullOrWhiteSpace(pix.MerchantCity);
+    }
+
+    /// <summary>Gera o BRCode (copia e cola) para PIX estático com valor fixo.</summary>
+    private static string GeneratePixBrCode(string pixKey, string merchantName, string merchantCity, decimal amount, string txid)
+    {
+        merchantName = merchantName.Length > 25 ? merchantName[..25] : merchantName;
+        merchantCity = merchantCity.Length > 15 ? merchantCity[..15] : merchantCity;
+        if (txid.Length > 25) txid = txid[..25];
+
+        static string Tlv(string tag, string value) => $"{tag}{value.Length:D2}{value}";
+
+        var gui = Tlv("00", "br.gov.bcb.pix");
+        var key = Tlv("01", pixKey);
+        var mai = Tlv("26", gui + key);
+        var adft = Tlv("62", Tlv("05", txid));
+        var amountStr = amount.ToString("F2", CultureInfo.InvariantCulture);
+
+        var sb = new StringBuilder();
+        sb.Append(Tlv("00", "01"));
+        sb.Append(mai);
+        sb.Append(Tlv("52", "0000"));
+        sb.Append(Tlv("53", "986"));
+        sb.Append(Tlv("54", amountStr));
+        sb.Append(Tlv("58", "BR"));
+        sb.Append(Tlv("59", merchantName));
+        sb.Append(Tlv("60", merchantCity));
+        sb.Append(adft);
+        sb.Append("6304");
+
+        var crc = ComputeCrc16(sb.ToString());
+        sb.Append(crc.ToString("X4"));
+        return sb.ToString();
+    }
+
+    private static ushort ComputeCrc16(string input)
+    {
+        ushort crc = 0xFFFF;
+        foreach (var c in input)
+        {
+            crc ^= (ushort)(c << 8);
+            for (var i = 0; i < 8; i++)
+                crc = (crc & 0x8000) != 0 ? (ushort)((crc << 1) ^ 0x1021) : (ushort)(crc << 1);
+        }
+        return crc;
+    }
+
+    private static string GenerateQrCodeBase64(string content)
+    {
+        using var qrGenerator = new QRCodeGenerator();
+        using var qrData = qrGenerator.CreateQrCode(content, QRCodeGenerator.ECCLevel.M);
+        using var qrCode = new PngByteQRCode(qrData);
+        var bytes = qrCode.GetGraphic(10);
+        return Convert.ToBase64String(bytes);
     }
 
     /// <summary>Indica se o pagamento com cartão (Mercado Pago) está habilitado.</summary>
@@ -52,16 +112,17 @@ public class PaymentController : ControllerBase
         return Ok(new CardEnabledResponse(enabled));
     }
 
-    /// <summary>Indica se o PIX (Mercado Pago Orders API) está habilitado (mesmo token do cartão).</summary>
+    /// <summary>Indica se o PIX está habilitado (Mercado Pago ou PIX estático configurado).</summary>
     [HttpGet("pix-enabled")]
     [ProducesResponseType(typeof(PixEnabledResponse), StatusCodes.Status200OK)]
     public IActionResult GetPixEnabled()
     {
         var token = _payment.MercadoPago.AccessToken ?? "";
-        return Ok(new PixEnabledResponse(HasValidMercadoPagoToken(token)));
+        var enabled = HasValidMercadoPagoToken(token) || HasStaticPixConfigured();
+        return Ok(new PixEnabledResponse(enabled));
     }
 
-    /// <summary>Cria ordem PIX no Mercado Pago (Orders API) com valor do plano. Retorna QR code (base64) e código copia-e-cola. Ao escanear, o valor já vem preenchido.</summary>
+    /// <summary>Cria ordem PIX: usa Mercado Pago se configurado, caso contrário gera QR Code estático com a chave PIX da configuração.</summary>
     [HttpPost("pix")]
     [ProducesResponseType(typeof(PixOrderResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -71,78 +132,71 @@ public class PaymentController : ControllerBase
         var userId = User.GetUserId();
         if (userId == null) return Unauthorized();
 
-        var token = _payment.MercadoPago.AccessToken ?? "";
-        if (!HasValidMercadoPagoToken(token))
-            throw CommException.BadRequest("PIX não configurado. Configure Payment:MercadoPago:AccessToken no appsettings.");
-
         var plan = await _planRepository.GetByIdAsync(request.PlanId, cancellationToken);
         if (plan == null || !plan.IsActive)
             throw CommException.BadRequest("Plano inválido ou inativo.");
 
-        var user = await _userRepository.GetByIdAsync(userId.Value, cancellationToken);
-        // No sandbox do Mercado Pago o e-mail do pagador deve conter @testuser.com
-        var payerEmail = _env.IsDevelopment()
-            ? "test@testuser.com"
-            : (user?.Email ?? "pagador@cssistemas.com.br");
+        var mpToken = _payment.MercadoPago.AccessToken ?? "";
 
-        // Orders API v1: external_reference máx 64 chars. Formato: userId (32) + planId (32), sem separador.
-        var totalAmount = plan.Price.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
-        var externalRef = $"{userId:N}{plan.Id:N}";
-        var orderPayload = new
+        // --- PIX estático tem precedência quando a chave está configurada ---
+        if (!HasStaticPixConfigured() && HasValidMercadoPagoToken(mpToken))
         {
-            type = "online",
-            external_reference = externalRef,
-            total_amount = totalAmount,
-            payer = new { email = payerEmail, first_name = "Cliente" },
-            transactions = new
+            var user = await _userRepository.GetByIdAsync(userId.Value, cancellationToken);
+            var payerEmail = user?.Email ?? "pagador@cssistemas.com.br";
+            var totalAmount = plan.Price.ToString("F2", CultureInfo.InvariantCulture);
+            var externalRef = $"{userId:N}{plan.Id:N}";
+            var orderPayload = new
             {
-                payments = new[]
+                type = "online",
+                external_reference = externalRef,
+                total_amount = totalAmount,
+                payer = new { email = payerEmail, first_name = "Cliente" },
+                transactions = new
                 {
-                    new
+                    payments = new[]
                     {
-                        amount = totalAmount,
-                        payment_method = new { id = "pix", type = "bank_transfer" }
+                        new { amount = totalAmount, payment_method = new { id = "pix", type = "bank_transfer" } }
                     }
                 }
-            }
-        };
-
-        using var http = _httpClientFactory.CreateClient();
-        http.DefaultRequestHeaders.Add("Authorization", "Bearer " + token);
-        // Obrigatório na Orders API: evita criar a mesma ordem duas vezes em caso de retry.
-        http.DefaultRequestHeaders.Add("X-Idempotency-Key", Guid.NewGuid().ToString("N"));
-        var json = JsonSerializer.Serialize(orderPayload);
-        using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-        var response = await http.PostAsync("https://api.mercadopago.com/v1/orders", content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            // Resposta ao cliente via CommException (mensagem única).
-            throw CommException.BadGateway("Erro ao criar ordem PIX no Mercado Pago. Verifique o Access Token e as credenciais.");
-        }
-
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        using var doc = JsonDocument.Parse(responseJson);
-        var root = doc.RootElement;
-        var orderId = root.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
-        string? qrCode = null;
-        string? qrCodeBase64 = null;
-        if (root.TryGetProperty("transactions", out var transactions) &&
-            transactions.TryGetProperty("payments", out var payments) &&
-            payments.GetArrayLength() > 0)
-        {
-            var firstPayment = payments[0];
-            if (firstPayment.TryGetProperty("payment_method", out var pm))
+            };
+            using var http = _httpClientFactory.CreateClient();
+            http.DefaultRequestHeaders.Add("Authorization", "Bearer " + mpToken);
+            http.DefaultRequestHeaders.Add("X-Idempotency-Key", Guid.NewGuid().ToString("N"));
+            var json = JsonSerializer.Serialize(orderPayload);
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var response = await http.PostAsync("https://api.mercadopago.com/v1/orders", content, cancellationToken);
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+                throw CommException.BadGateway($"Erro ao criar ordem PIX no Mercado Pago. Detalhe: {(int)response.StatusCode} - {responseJson}");
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+            var orderId = root.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+            if (string.IsNullOrEmpty(orderId))
+                throw CommException.BadGateway("Resposta inválida do Mercado Pago (sem id da ordem).");
+            string? qrCode = null, qrCodeBase64 = null;
+            if (root.TryGetProperty("transactions", out var transactions) &&
+                transactions.TryGetProperty("payments", out var payments) &&
+                payments.GetArrayLength() > 0)
             {
-                if (pm.TryGetProperty("qr_code", out var qr)) qrCode = qr.GetString();
-                if (pm.TryGetProperty("qr_code_base64", out var qr64)) qrCodeBase64 = qr64.GetString();
+                var pm = payments[0].TryGetProperty("payment_method", out var pmProp) ? pmProp : (JsonElement?)null;
+                if (pm.HasValue)
+                {
+                    if (pm.Value.TryGetProperty("qr_code", out var qr)) qrCode = qr.GetString();
+                    if (pm.Value.TryGetProperty("qr_code_base64", out var qr64)) qrCodeBase64 = qr64.GetString();
+                }
             }
+            return Ok(new PixOrderResponse(orderId, qrCode ?? "", qrCodeBase64 ?? ""));
         }
 
-        if (string.IsNullOrEmpty(orderId))
-            throw CommException.BadGateway("Resposta inválida do Mercado Pago (sem id da ordem).");
+        // --- PIX estático (sem Mercado Pago) ---
+        if (!HasStaticPixConfigured())
+            throw CommException.BadRequest("PIX não configurado. Configure Payment:Pix ou Payment:MercadoPago:AccessToken.");
 
-        return Ok(new PixOrderResponse(orderId, qrCode ?? "", qrCodeBase64 ?? ""));
+        var pix = _payment.Pix;
+        var txid = Guid.NewGuid().ToString("N")[..25];
+        var brCode = GeneratePixBrCode(pix.Key, pix.MerchantName, pix.MerchantCity, plan.Price, txid);
+        var qrBase64 = GenerateQrCodeBase64(brCode);
+        return Ok(new PixOrderResponse($"STATIC-{txid}", brCode, qrBase64));
     }
 
     /// <summary>Cria preferência de checkout no Mercado Pago e retorna a URL para redirecionar o usuário. Cartão aceita todas as bandeiras (Visa, Mastercard, Elo, Hipercard, etc.) via Checkout Pro.</summary>
@@ -200,7 +254,7 @@ public class PaymentController : ControllerBase
                 Pending = pendingUrl
             },
             AutoReturn = "approved",
-            ExternalReference = $"{userId}_{plan.Id}"
+            ExternalReference = $"{userId:N}{plan.Id:N}"
         };
 
         using var http = _httpClientFactory.CreateClient();

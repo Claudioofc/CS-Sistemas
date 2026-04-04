@@ -41,8 +41,15 @@ public class SubscriptionRequiredMiddleware
             return;
         }
 
+        if (context.User.FindFirstValue("isAdmin") == "true")
+        {
+            await _next(context);
+            return;
+        }
+
         var path = context.Request.Path.Value?.TrimEnd('/') ?? "";
         var method = context.Request.Method;
+
         if (Whitelist.Any(w => path.Equals(w.Path, StringComparison.OrdinalIgnoreCase) && method.Equals(w.Method, StringComparison.OrdinalIgnoreCase)))
         {
             await _next(context);

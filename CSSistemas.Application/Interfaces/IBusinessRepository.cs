@@ -12,7 +12,6 @@ public interface IBusinessRepository
     /// <summary>Lista todos os negócios (uso admin). Inclui User (dono) para exibir nome.</summary>
     Task<IReadOnlyList<Business>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<Business?> GetByPublicSlugAsync(string publicSlug, CancellationToken cancellationToken = default);
-    Task<Business?> GetByWhatsAppPhoneAsync(string phoneNormalized, CancellationToken cancellationToken = default);
     Task AddAsync(Business business, CancellationToken cancellationToken = default);
     Task UpdateAsync(Business business, CancellationToken cancellationToken = default);
     /// <summary>Soft delete: marca como excluído (não remove do banco).</summary>

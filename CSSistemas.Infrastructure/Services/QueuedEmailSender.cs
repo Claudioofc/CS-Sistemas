@@ -32,6 +32,11 @@ public sealed class QueuedEmailSender : IEmailSender
         return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.AppointmentCancelledByProfessional, null, null, toEmail, clientName, scheduledAtFormatted, null, businessName, null, cancellationReason, null, null), cancellationToken);
     }
 
+    public Task SendAppointmentCancelledByClientAsync(string toEmail, string clientName, string scheduledAtFormatted, string businessName, CancellationToken cancellationToken = default)
+    {
+        return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.AppointmentCancelledByClient, null, null, toEmail, clientName, scheduledAtFormatted, null, businessName, null, null, null, null), cancellationToken);
+    }
+
     public Task SendNewUserRegisteredAsync(string toEmail, string newUserName, string newUserEmail, CancellationToken cancellationToken = default)
     {
         return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.NewUserRegistered, null, null, toEmail, null, null, null, null, null, null, newUserName, newUserEmail), cancellationToken);
@@ -45,6 +50,17 @@ public sealed class QueuedEmailSender : IEmailSender
     public Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, byte[]? attachment = null, string? attachmentFileName = null, CancellationToken cancellationToken = default)
     {
         return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.SupportRequest, null, null, toEmail, null, null, null, null, null, null, null, null, userName, userEmail, message, pageUrl, attachment, attachmentFileName), cancellationToken);
+    }
+
+    public Task SendSubscriptionExpiryWarningAsync(string toEmail, string userName, string planName, string endsAtFormatted, int daysRemaining, CancellationToken cancellationToken = default)
+    {
+        return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.SubscriptionExpiryWarning, null, null, toEmail, userName, null, null, null, null, null,
+            ExpiryWarningPlanName: planName, ExpiryWarningEndsAt: endsAtFormatted, ExpiryWarningDays: daysRemaining), cancellationToken);
+    }
+
+    public Task SendAppointmentReminderAsync(string toEmail, string clientName, string scheduledAtFormatted, string serviceName, string businessName, string cancelLink, CancellationToken cancellationToken = default)
+    {
+        return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.AppointmentReminder, null, null, toEmail, clientName, scheduledAtFormatted, serviceName, businessName, cancelLink, null), cancellationToken);
     }
 
     private async Task EnqueueAsync(EmailWorkItem item, CancellationToken cancellationToken)

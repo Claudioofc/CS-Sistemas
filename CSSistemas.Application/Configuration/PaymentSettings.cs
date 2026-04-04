@@ -33,6 +33,8 @@ public class MercadoPagoSettings
 {
     /// <summary>Access Token do Mercado Pago (credenciais > produção ou teste). Nunca exponha no frontend.</summary>
     public string AccessToken { get; set; } = string.Empty;
+    /// <summary>Segredo do webhook (Mercado Pago > Configurações > Webhooks > Chave secreta). Usado para validar a assinatura HMAC-SHA256 das notificações.</summary>
+    public string WebhookSecret { get; set; } = string.Empty;
     /// <summary>URL de retorno após pagamento aprovado (ex: https://seusite.com/planos?status=success).</summary>
     public string SuccessUrl { get; set; } = string.Empty;
     /// <summary>URL de retorno quando o usuário cancela ou falha (ex: https://seusite.com/planos?status=failure).</summary>

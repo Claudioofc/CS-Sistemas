@@ -6,6 +6,7 @@ using CSSistemas.Application.Interfaces;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace CSSistemas.API.Controllers;
@@ -16,6 +17,24 @@ public class AuthController : ControllerBase
 {
     private const int MaxProfilePhotoBytes = 5 * 1024 * 1024; // 5 MB
     private static readonly string[] AllowedImageContentTypes = { "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif" };
+
+    private static bool HasValidImageMagicBytes(IFormFile file)
+    {
+        var header = new byte[12];
+        using var stream = file.OpenReadStream();
+        var read = stream.Read(header, 0, header.Length);
+        if (read < 4) return false;
+        // JPEG: FF D8 FF
+        if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) return true;
+        // PNG: 89 50 4E 47
+        if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47) return true;
+        // GIF: 47 49 46 38
+        if (header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x38) return true;
+        // WebP: RIFF????WEBP (bytes 0-3 = RIFF, 8-11 = WEBP)
+        if (read >= 12 && header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46
+            && header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50) return true;
+        return false;
+    }
 
     private readonly IAuthService _authService;
     private readonly IUserRepository _userRepository;
@@ -51,6 +70,7 @@ public class AuthController : ControllerBase
 
     /// <summary>Login — retorna JWT para web e mobile.</summary>
     [HttpPost("login")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -72,6 +92,7 @@ public class AuthController : ControllerBase
 
     /// <summary>Registro — cria usuário e retorna JWT.</summary>
     [HttpPost("register")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
@@ -95,6 +116,7 @@ public class AuthController : ControllerBase
 
     /// <summary>Esqueci minha senha: envia e-mail com link para redefinir (não revela se o e-mail existe).</summary>
     [HttpPost("forgot-password")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
@@ -112,6 +134,7 @@ public class AuthController : ControllerBase
 
     /// <summary>Redefine a senha com o token recebido por e-mail.</summary>
     [HttpPost("reset-password")]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -191,6 +214,8 @@ public class AuthController : ControllerBase
         var contentType = file.ContentType?.ToLowerInvariant() ?? "";
         if (!AllowedImageContentTypes.Contains(contentType))
             throw CommException.BadRequest("Formato não permitido. Use JPEG, PNG, WebP ou GIF.");
+        if (!HasValidImageMagicBytes(file))
+            throw CommException.BadRequest("Arquivo inválido. O conteúdo não corresponde a uma imagem JPEG, PNG, WebP ou GIF.");
         var ext = contentType switch
         {
             "image/jpeg" or "image/jpg" => ".jpg",

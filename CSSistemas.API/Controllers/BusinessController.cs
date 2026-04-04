@@ -69,7 +69,7 @@ public class BusinessController : ControllerBase
         var validation = await _validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid) return BadRequest(validation.ToValidationErrorResponse());
 
-        var business = Business.Create(userId.Value, request.Name, request.BusinessType, request.PublicSlug, request.WhatsAppPhone);
+        var business = Business.Create(userId.Value, request.Name, request.BusinessType, request.PublicSlug);
         await _repository.AddAsync(business, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = business.Id }, ToResponse(business));
     }
@@ -170,6 +170,6 @@ public class BusinessController : ControllerBase
     }
 
     private static BusinessResponse ToResponse(Business b) => new(
-        b.Id, b.UserId, b.Name, b.BusinessType, b.PublicSlug, b.WhatsAppPhone, b.CreatedAt, b.UpdatedAt);
+        b.Id, b.UserId, b.Name, b.BusinessType, b.PublicSlug, b.CreatedAt, b.UpdatedAt);
 
 }

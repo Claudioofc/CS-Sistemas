@@ -98,9 +98,7 @@ public class ResendEmailSender : IEmailSender
 <p>Seu agendamento em <strong>{System.Net.WebUtility.HtmlEncode(businessName)}</strong> foi confirmado.</p>
 <p><strong>Serviço:</strong> {System.Net.WebUtility.HtmlEncode(serviceName)}<br/>
 <strong>Data/hora:</strong> {System.Net.WebUtility.HtmlEncode(scheduledAtFormatted)}</p>
-<p>Para cancelar, use o link abaixo:</p>
-<p><a href=""{cancelLink}"" style=""color:#2563eb;text-decoration:underline;"">Cancelar este agendamento</a></p>
-<p style=""word-break:break-all;color:#666;font-size:12px;"">{cancelLink}</p>
+{(string.IsNullOrWhiteSpace(cancelLink) ? "<p>Para cancelar, entre em contato com o estabelecimento.</p>" : $@"<p>Para cancelar, use o link abaixo:</p><p><a href=""{cancelLink}"" style=""color:#2563eb;text-decoration:underline;"">Cancelar este agendamento</a></p><p style=""word-break:break-all;color:#666;font-size:12px;"">{cancelLink}</p>")}
 <p>— CS Sistemas</p>"
         };
 
@@ -168,6 +166,50 @@ public class ResendEmailSender : IEmailSender
         catch (Exception ex)
         {
             _logger.LogError(ex, "Falha ao enviar e-mail de cancelamento para {Email} via Resend", toEmail);
+            throw;
+        }
+    }
+
+    public async Task SendAppointmentCancelledByClientAsync(string toEmail, string clientName, string scheduledAtFormatted, string businessName, CancellationToken cancellationToken = default)
+    {
+        var apiKey = _settings.ResendApiKey?.Trim();
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            _logger.LogWarning("Resend configurado mas ResendApiKey vazio.");
+            return;
+        }
+
+        var from = string.IsNullOrWhiteSpace(_settings.FromEmail)
+            ? $"CS Sistemas <onboarding@resend.dev>"
+            : $"{_settings.FromName} <{_settings.FromEmail}>";
+
+        var body = new
+        {
+            from,
+            to = new[] { toEmail },
+            subject = "Agendamento cancelado - " + businessName,
+            html = $@"
+<p>Olá, {System.Net.WebUtility.HtmlEncode(clientName)}.</p>
+<p>Seu agendamento em <strong>{System.Net.WebUtility.HtmlEncode(businessName)}</strong> para o dia <strong>{System.Net.WebUtility.HtmlEncode(scheduledAtFormatted)}</strong> foi cancelado com sucesso.</p>
+<p>Se quiser reagendar, acesse o link de agendamento do estabelecimento.</p>
+<p>— CS Sistemas</p>"
+        };
+
+        try
+        {
+            using var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + apiKey);
+            var response = await client.PostAsJsonAsync(ResendApiUrl, body, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Resend API erro {StatusCode}: {Body}", response.StatusCode, errorBody);
+                throw new InvalidOperationException($"Falha ao enviar e-mail: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Falha ao enviar e-mail de cancelamento pelo cliente para {Email} via Resend", toEmail);
             throw;
         }
     }
@@ -256,6 +298,58 @@ public class ResendEmailSender : IEmailSender
             _logger.LogError(ex, "Falha ao enviar e-mail de boas-vindas para {Email} via Resend", toEmail);
             throw;
         }
+    }
+
+    public async Task SendSubscriptionExpiryWarningAsync(string toEmail, string userName, string planName, string endsAtFormatted, int daysRemaining, CancellationToken cancellationToken = default)
+    {
+        var apiKey = _settings.ResendApiKey?.Trim();
+        if (string.IsNullOrEmpty(apiKey)) { _logger.LogWarning("Resend configurado mas ResendApiKey vazio."); return; }
+        var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? "CS Sistemas <onboarding@resend.dev>" : $"{_settings.FromName} <{_settings.FromEmail}>";
+        var body = new
+        {
+            from,
+            to = new[] { toEmail },
+            subject = $"Sua assinatura vence em {daysRemaining} dia(s) - CS Sistemas",
+            html = $@"<p>Olá, {System.Net.WebUtility.HtmlEncode(userName)}.</p>
+<p>Sua assinatura <strong>{System.Net.WebUtility.HtmlEncode(planName)}</strong> vence em <strong>{daysRemaining} dia(s)</strong> ({System.Net.WebUtility.HtmlEncode(endsAtFormatted)}).</p>
+<p>Renove agora mesmo para continuar usando o CS Sistemas sem interrupções.</p>
+<p>— CS Sistemas</p>"
+        };
+        try
+        {
+            using var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + apiKey);
+            var response = await client.PostAsJsonAsync(ResendApiUrl, body, cancellationToken);
+            if (!response.IsSuccessStatusCode) { var err = await response.Content.ReadAsStringAsync(cancellationToken); _logger.LogError("Resend API erro {StatusCode}: {Body}", response.StatusCode, err); }
+        }
+        catch (Exception ex) { _logger.LogError(ex, "Falha ao enviar aviso de vencimento para {Email} via Resend", toEmail); }
+    }
+
+    public async Task SendAppointmentReminderAsync(string toEmail, string clientName, string scheduledAtFormatted, string serviceName, string businessName, string cancelLink, CancellationToken cancellationToken = default)
+    {
+        var apiKey = _settings.ResendApiKey?.Trim();
+        if (string.IsNullOrEmpty(apiKey)) { _logger.LogWarning("Resend configurado mas ResendApiKey vazio."); return; }
+        var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? "CS Sistemas <onboarding@resend.dev>" : $"{_settings.FromName} <{_settings.FromEmail}>";
+        var body = new
+        {
+            from,
+            to = new[] { toEmail },
+            subject = "Lembrete de agendamento - " + businessName,
+            html = $@"<p>Olá, {System.Net.WebUtility.HtmlEncode(clientName)}.</p>
+<p>Este é um lembrete do seu agendamento em <strong>{System.Net.WebUtility.HtmlEncode(businessName)}</strong>.</p>
+<p><strong>Serviço:</strong> {System.Net.WebUtility.HtmlEncode(serviceName)}<br/>
+<strong>Data/hora:</strong> {System.Net.WebUtility.HtmlEncode(scheduledAtFormatted)}</p>
+<p>Caso precise cancelar: <a href=""{cancelLink}"" style=""color:#2563eb;"">Cancelar agendamento</a></p>
+<p>— CS Sistemas</p>"
+        };
+        try
+        {
+            using var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + apiKey);
+            var response = await client.PostAsJsonAsync(ResendApiUrl, body, cancellationToken);
+            if (!response.IsSuccessStatusCode) { var err = await response.Content.ReadAsStringAsync(cancellationToken); _logger.LogError("Resend API erro {StatusCode}: {Body}", response.StatusCode, err); }
+        }
+        catch (Exception ex) { _logger.LogError(ex, "Falha ao enviar lembrete para {Email} via Resend", toEmail); }
     }
 
     public async Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, byte[]? attachment = null, string? attachmentFileName = null, CancellationToken cancellationToken = default)

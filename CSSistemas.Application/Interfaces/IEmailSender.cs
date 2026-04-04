@@ -12,6 +12,9 @@ public interface IEmailSender
     /// <summary>Aviso de que o profissional cancelou o agendamento. Justificativa opcional.</summary>
     Task SendAppointmentCancelledByProfessionalAsync(string toEmail, string clientName, string scheduledAtFormatted, string businessName, string? cancellationReason = null, CancellationToken cancellationToken = default);
 
+    /// <summary>Confirmação ao cliente de que ele mesmo cancelou o agendamento.</summary>
+    Task SendAppointmentCancelledByClientAsync(string toEmail, string clientName, string scheduledAtFormatted, string businessName, CancellationToken cancellationToken = default);
+
     /// <summary>Aviso para o admin: novo usuário se cadastrou no sistema.</summary>
     Task SendNewUserRegisteredAsync(string toEmail, string newUserName, string newUserEmail, CancellationToken cancellationToken = default);
 
@@ -20,4 +23,10 @@ public interface IEmailSender
 
     /// <summary>Mensagem de suporte: cliente reporta problema/erro; envia para o e-mail do admin.</summary>
     Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, byte[]? attachment = null, string? attachmentFileName = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Aviso de vencimento de assinatura (7 dias ou 1 dia antes).</summary>
+    Task SendSubscriptionExpiryWarningAsync(string toEmail, string userName, string planName, string endsAtFormatted, int daysRemaining, CancellationToken cancellationToken = default);
+
+    /// <summary>Lembrete de agendamento enviado X horas antes do horário.</summary>
+    Task SendAppointmentReminderAsync(string toEmail, string clientName, string scheduledAtFormatted, string serviceName, string businessName, string cancelLink, CancellationToken cancellationToken = default);
 }

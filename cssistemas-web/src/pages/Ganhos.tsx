@@ -102,6 +102,77 @@ export default function Ganhos() {
     }
   }
 
+  if (isAdmin) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Assinaturas</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Todos os clientes que assinaram o plano premium</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h2 className="font-semibold text-gray-900">Registro de assinaturas premium</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{premiumSubscriptions.length} assinatura{premiumSubscriptions.length !== 1 ? 's' : ''} registrada{premiumSubscriptions.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-primary/10 text-primary">
+                {premiumSubscriptions.length} premium
+              </span>
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-green-50 text-green-700">
+                Receita: {formatCurrency(premiumSubscriptions.reduce((sum, s) => sum + (s.price ?? 0), 0))}
+              </span>
+            </div>
+          </div>
+          {premiumLoading ? (
+            <p className="px-5 py-8 text-sm text-gray-400 text-center">Carregando...</p>
+          ) : premiumSubscriptions.length === 0 ? (
+            <p className="px-5 py-8 text-sm text-gray-400 text-center">Nenhuma assinatura premium registrada.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Cliente</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Plano</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Início</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Vencimento</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {[...premiumSubscriptions]
+                    .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+                    .map((s, i) => {
+                      const isActive = new Date(s.endsAt) >= new Date()
+                      return (
+                        <tr key={`${s.userId}-${i}`} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-5 py-3">
+                            <p className="text-sm font-medium text-gray-900">{s.userName || '—'}</p>
+                            <p className="text-xs text-gray-500">{s.userEmail}</p>
+                          </td>
+                          <td className="px-5 py-3 text-sm text-gray-600 whitespace-nowrap">{s.planName}</td>
+                          <td className="px-5 py-3 text-sm font-semibold text-primary whitespace-nowrap">{formatCurrency(s.price)}</td>
+                          <td className="px-5 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDateOnly(s.startedAt)}</td>
+                          <td className="px-5 py-3 text-sm text-gray-600 whitespace-nowrap">{formatDateOnly(s.endsAt)}</td>
+                          <td className="px-5 py-3">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                              {isActive ? 'Ativa' : 'Expirada'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 sm:p-6 max-w-4xl">
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
@@ -113,38 +184,6 @@ export default function Ganhos() {
         </div>
         <ValueVisibilityToggle className="flex-shrink-0" />
       </div>
-
-      {isAdmin && (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6">
-          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
-            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Registro de assinaturas premium</h2>
-            <p className="text-sm text-gray-500 mt-0.5">Clientes que assinaram o plano premium (visível apenas para administradores)</p>
-          </div>
-          <div className="p-4">
-            {premiumLoading ? (
-              <p className="text-gray-500 text-sm">Carregando...</p>
-            ) : premiumSubscriptions.length === 0 ? (
-              <p className="text-gray-500 text-sm">Nenhuma assinatura premium registrada.</p>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {premiumSubscriptions.map((s, i) => (
-                  <li key={`${s.userId}-${i}`} className="py-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="font-medium text-gray-900">{s.userName || '—'}</p>
-                      <p className="text-sm text-gray-600">{s.userEmail}</p>
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      <span>Início: {formatDateOnly(s.startedAt)}</span>
-                      <span className="mx-2">·</span>
-                      <span>Fim: {formatDateOnly(s.endsAt)}</span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
 
       {!hasClinic ? (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-800">

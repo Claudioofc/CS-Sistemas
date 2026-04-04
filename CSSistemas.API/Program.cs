@@ -9,9 +9,10 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddApiAuthorization();
 builder.Services.AddApiValidators();
-builder.Services.AddApiCors();
+builder.Services.AddApiCors(builder.Configuration);
 builder.Services.AddApiRateLimiting();
 builder.Services.AddApiControllers();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 

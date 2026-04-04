@@ -24,6 +24,11 @@ const navItemsBase = [
   { path: ROUTES.GANHOS, label: 'Ganhos', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
   { path: ROUTES.CONFIGURACOES, label: 'Configurações', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
 ]
+const navItemsAdmin = [
+  { path: ROUTES.ADMIN, label: 'Visão Geral', icon: 'M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z' },
+  { path: ROUTES.CLIENTES, label: 'Usuários', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
+  { path: ROUTES.GANHOS, label: 'Assinaturas', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+]
 const premiumPath = { path: ROUTES.PREMIUM, label: 'Premium', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z' }
 
 function Icon({ d }: { d: string }) {
@@ -187,7 +192,7 @@ export default function Layout() {
           <span className="text-white font-semibold text-lg">{APP_NAME}</span>
         </div>
         <nav className="flex-1 py-4 px-2 space-y-0.5">
-          {navItemsBase.map((item) => {
+          {(user?.isAdmin ? navItemsAdmin : navItemsBase).map((item) => {
             const isActive = location.pathname === item.path
             return (
               <Link
@@ -203,16 +208,16 @@ export default function Layout() {
               </Link>
             )
           })}
-          <div className="pt-4 mt-4 border-t border-white/20">
-            <button
-              type="button"
-              onClick={openSupportModal}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition min-h-[44px] items-center w-full text-left cursor-pointer"
-            >
-              <Icon d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              Fale conosco
-            </button>
-            {!user?.isAdmin && (
+          {!user?.isAdmin && (
+            <div className="pt-4 mt-4 border-t border-white/20">
+              <button
+                type="button"
+                onClick={openSupportModal}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition min-h-[44px] items-center w-full text-left cursor-pointer"
+              >
+                <Icon d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                Fale conosco
+              </button>
               <Link
                 to={premiumPath.path}
                 onClick={closeSidebar}
@@ -221,20 +226,8 @@ export default function Layout() {
                 <Icon d={premiumPath.icon} />
                 {premiumPath.label}
               </Link>
-            )}
-            {user?.isAdmin && (
-              <Link
-                to={ROUTES.ADMIN}
-                onClick={closeSidebar}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition mt-0.5 min-h-[44px] items-center ${
-                  location.pathname === ROUTES.ADMIN ? 'bg-white/20 text-white' : 'text-white/80 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                <Icon d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                Clientes cadastrados
-              </Link>
-            )}
-          </div>
+            </div>
+          )}
         </nav>
       </aside>
 

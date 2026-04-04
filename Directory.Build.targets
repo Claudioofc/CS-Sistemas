@@ -1,0 +1,5 @@
+<Project>
+  <Target Name="StopCssistemasApiProcessBeforeBuild" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+    <Exec Command="taskkill /F /T /IM CSSistemas.API.exe" IgnoreExitCode="true" />
+  </Target>
+</Project>

@@ -10,6 +10,7 @@
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.21" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
@@ -24,6 +25,10 @@
   </ItemGroup>
 
   <!-- A cada build da API: compila o frontend e copia dist para wwwroot (atualização automática). -->
+  <Target Name="StopRunningApiProcess" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT'">
+    <Exec Command="taskkill /F /T /IM $(AssemblyName).exe" IgnoreExitCode="true" />
+  </Target>
+
   <Target Name="BuildAndDeployFrontend" BeforeTargets="Build" Condition="Exists('$(ProjectDir)..\cssistemas-web\package.json')">
     <Exec Command="npm run build" WorkingDirectory="$(ProjectDir)..\cssistemas-web" />
     <Exec Command="robocopy &quot;$(ProjectDir)..\cssistemas-web\dist&quot; &quot;$(ProjectDir)wwwroot&quot; /MIR /NFL /NDL /NJH /NJS" IgnoreExitCode="true" />

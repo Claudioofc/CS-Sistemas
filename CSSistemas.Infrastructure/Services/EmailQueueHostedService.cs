@@ -44,6 +44,9 @@ public sealed class EmailQueueHostedService : BackgroundService
                     case EmailWorkItemKind.AppointmentCancelledByProfessional:
                         await sender.SendAppointmentCancelledByProfessionalAsync(item.ToEmail!, item.ClientName!, item.ScheduledAtFormatted!, item.BusinessName!, item.CancellationReason, stoppingToken);
                         break;
+                    case EmailWorkItemKind.AppointmentCancelledByClient:
+                        await sender.SendAppointmentCancelledByClientAsync(item.ToEmail!, item.ClientName!, item.ScheduledAtFormatted!, item.BusinessName!, stoppingToken);
+                        break;
                     case EmailWorkItemKind.NewUserRegistered:
                         await sender.SendNewUserRegisteredAsync(item.ToEmail!, item.NewUserRegisteredName!, item.NewUserRegisteredEmail!, stoppingToken);
                         break;
@@ -52,6 +55,12 @@ public sealed class EmailQueueHostedService : BackgroundService
                         break;
                     case EmailWorkItemKind.SupportRequest:
                         await sender.SendSupportRequestAsync(item.ToEmail!, item.SupportRequestUserName!, item.SupportRequestUserEmail!, item.SupportRequestMessage!, item.SupportRequestPageUrl, item.SupportRequestAttachment, item.SupportRequestAttachmentFileName, stoppingToken);
+                        break;
+                    case EmailWorkItemKind.SubscriptionExpiryWarning:
+                        await sender.SendSubscriptionExpiryWarningAsync(item.ToEmail!, item.ClientName!, item.ExpiryWarningPlanName!, item.ExpiryWarningEndsAt!, item.ExpiryWarningDays!.Value, stoppingToken);
+                        break;
+                    case EmailWorkItemKind.AppointmentReminder:
+                        await sender.SendAppointmentReminderAsync(item.ToEmail!, item.ClientName!, item.ScheduledAtFormatted!, item.ServiceName!, item.BusinessName!, item.CancelLink!, stoppingToken);
                         break;
                 }
             }

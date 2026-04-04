@@ -192,9 +192,9 @@ export default function Configuracoes() {
     setSlugError('')
     setSlugSaved(false)
     setSlugSavingId(businessId)
-    const result = await apiPut<{ name: string; businessType: number; publicSlug: string | null; whatsAppPhone: string | null }, BusinessItem>(
+    const result = await apiPut<{ name: string; businessType: number; publicSlug: string | null }, BusinessItem>(
       `/api/business/${businessId}`,
-      { name: business.name, businessType: business.businessType, publicSlug: slugValue || null, whatsAppPhone: business.whatsAppPhone ?? null },
+      { name: business.name, businessType: business.businessType, publicSlug: slugValue || null },
       token
     )
     setSlugSavingId(null)

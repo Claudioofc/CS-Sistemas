@@ -44,15 +44,6 @@ public class BusinessRepository : IBusinessRepository
             .AsNoTracking()
             .FirstOrDefaultAsync(b => b.PublicSlug == publicSlug.Trim().ToLowerInvariant(), cancellationToken);
 
-    public async Task<Business?> GetByWhatsAppPhoneAsync(string phoneNormalized, CancellationToken cancellationToken = default)
-    {
-        var normalized = new string(phoneNormalized.Where(char.IsDigit).ToArray()).Trim();
-        if (string.IsNullOrEmpty(normalized)) return null;
-        return await _context.Businesses
-            .AsNoTracking()
-            .FirstOrDefaultAsync(b => b.WhatsAppPhone == normalized, cancellationToken);
-    }
-
     public async Task AddAsync(Business business, CancellationToken cancellationToken = default)
     {
         await _context.Businesses.AddAsync(business, cancellationToken);

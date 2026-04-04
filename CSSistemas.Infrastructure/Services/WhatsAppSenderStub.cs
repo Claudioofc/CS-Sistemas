@@ -24,7 +24,7 @@ public class WhatsAppSenderStub : IWhatsAppSender
             _logger.LogInformation("[WhatsApp STUB] Envio desabilitado. Para: {Phone}, Texto: {Text}", phoneNumber, text);
             return Task.FromResult(true);
         }
-        _logger.LogInformation("[WhatsApp STUB] Enviaria para {Phone}: {Text}. Configure Provider ({Provider}) para envio real.", phoneNumber, text, _settings.Provider);
+        _logger.LogInformation("[WhatsApp STUB] Enviaria para {Phone}: {Text}. Configure ApiUrl e ApiToken para envio real via uazapi.dev.", phoneNumber, text);
         return Task.FromResult(true);
     }
 }

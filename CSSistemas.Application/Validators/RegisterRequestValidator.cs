@@ -16,7 +16,7 @@ public class RegisterRequestValidator : AbstractValidator<RegisterRequest>
 
         RuleFor(x => x.Password)
             .NotEmpty().WithMessage("Senha é obrigatória.")
-            .MinimumLength(6).WithMessage("Senha deve ter no mínimo 6 caracteres.");
+            .MinimumLength(8).WithMessage("Senha deve ter no mínimo 8 caracteres.");
 
         RuleFor(x => x.Name)
             .NotEmpty().WithMessage("Nome é obrigatório.")

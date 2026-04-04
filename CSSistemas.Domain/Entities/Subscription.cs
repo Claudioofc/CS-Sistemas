@@ -13,8 +13,13 @@ public class Subscription : EntityBase
     public SubscriptionType SubscriptionType { get; protected set; }
     public DateTime StartedAt { get; protected set; }
     public DateTime EndsAt { get; protected set; }
+    public DateTime? ExpiryWarning7DaySentAt { get; protected set; }
+    public DateTime? ExpiryWarning1DaySentAt { get; protected set; }
 
     protected Subscription() { }
+
+    public void MarkExpiryWarning7DaySent() { ExpiryWarning7DaySentAt = DateTime.UtcNow; UpdatedAt = DateTime.UtcNow; }
+    public void MarkExpiryWarning1DaySent() { ExpiryWarning1DaySentAt = DateTime.UtcNow; UpdatedAt = DateTime.UtcNow; }
 
     /// <summary>Cria assinatura trial de 7 dias.</summary>
     public static Subscription CreateTrial(Guid userId)

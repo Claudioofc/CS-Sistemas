@@ -54,4 +54,25 @@ public class SubscriptionRepository : ISubscriptionRepository
         await _context.Subscriptions.AddAsync(subscription, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task UpdateAsync(Subscription subscription, CancellationToken cancellationToken = default)
+    {
+        _context.Subscriptions.Update(subscription);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<Subscription>> GetExpiringForWarningAsync(int daysBeforeExpiry, CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+        var windowStart = now.AddDays(daysBeforeExpiry - 0.5);
+        var windowEnd = now.AddDays(daysBeforeExpiry + 0.5);
+
+        return await _context.Subscriptions
+            .Include(s => s.User)
+            .Where(s => s.SubscriptionType == SubscriptionType.Monthly
+                     && s.EndsAt >= windowStart
+                     && s.EndsAt <= windowEnd
+                     && (daysBeforeExpiry == 7 ? s.ExpiryWarning7DaySentAt == null : s.ExpiryWarning1DaySentAt == null))
+            .ToListAsync(cancellationToken);
+    }
 }

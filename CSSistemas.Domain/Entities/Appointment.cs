@@ -15,6 +15,8 @@ public class Appointment : EntityBase
     public string? Notes { get; protected set; }
     /// <summary>Token para o cliente cancelar pelo link do e-mail (agendamento público).</summary>
     public string? CancelToken { get; protected set; }
+    /// <summary>Quando foi enviado o lembrete de agendamento por e-mail/WhatsApp.</summary>
+    public DateTime? ReminderSentAt { get; protected set; }
 
     public Business Business { get; protected set; } = null!;
     public Service Service { get; protected set; } = null!;
@@ -64,4 +66,6 @@ public class Appointment : EntityBase
         CancelToken = token.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void MarkReminderSent() { ReminderSentAt = DateTime.UtcNow; UpdatedAt = DateTime.UtcNow; }
 }

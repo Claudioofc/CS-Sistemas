@@ -6,8 +6,6 @@ using CSSistemas.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Caching.Distributed;
-using Microsoft.Extensions.Http;
 using System.Threading.Channels;
 
 namespace CSSistemas.Infrastructure;
@@ -35,24 +33,16 @@ public static class DependencyInjection
         services.Configure<EmailSettings>(configuration.GetSection(EmailSettings.SectionName));
         services.Configure<AdminSettings>(configuration.GetSection(AdminSettings.SectionName));
         services.Configure<PaymentSettings>(configuration.GetSection(PaymentSettings.SectionName));
-        services.Configure<OpenAISettings>(configuration.GetSection(OpenAISettings.SectionName));
         services.Configure<WhatsAppSettings>(configuration.GetSection(WhatsAppSettings.SectionName));
-
-        services.AddHttpClient<IOpenAIChatService, OpenAIChatService>();
-
-        var redisConfig = configuration["Redis:Configuration"] ?? configuration.GetConnectionString("Redis");
-        if (!string.IsNullOrWhiteSpace(redisConfig))
+        services.AddHttpClient<UazApiWhatsAppSender>();
+        services.AddScoped<IWhatsAppSender>(sp =>
         {
-            services.AddStackExchangeRedisCache(options => options.Configuration = redisConfig);
-            services.AddSingleton<IPendingWhatsAppSlotStore, RedisPendingWhatsAppSlotStore>();
-        }
-        else
-        {
-            services.AddSingleton<IPendingWhatsAppSlotStore, InMemoryPendingWhatsAppSlotStore>();
-        }
-
-        services.AddScoped<IWhatsAppSender, WhatsAppSenderStub>();
-
+            var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<WhatsAppSettings>>().Value;
+            if (settings.Enabled && !string.IsNullOrWhiteSpace(settings.ApiUrl))
+                return sp.GetRequiredService<UazApiWhatsAppSender>();
+            return sp.GetRequiredService<WhatsAppSenderStub>();
+        });
+        services.AddScoped<WhatsAppSenderStub>();
         services.AddScoped<EmailSender>();
         services.AddScoped<ResendEmailSender>();
         services.AddKeyedScoped<IEmailSender>("real", (sp, _) =>
@@ -65,11 +55,12 @@ public static class DependencyInjection
         services.AddSingleton(Channel.CreateUnbounded<EmailWorkItem>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false }));
         services.AddSingleton<IEmailSender, QueuedEmailSender>();
         services.AddHostedService<EmailQueueHostedService>();
+        services.AddHostedService<SubscriptionExpiryWarningService>();
+        services.AddHostedService<AppointmentReminderService>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBusinessRepository, BusinessRepository>();
         services.AddScoped<IServiceRepository, ServiceRepository>();
         services.AddScoped<IClientRepository, ClientRepository>();
-        services.AddScoped<ISystemMessageRepository, SystemMessageRepository>();
         services.AddScoped<IAppointmentRepository, AppointmentRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IBusinessHoursRepository, BusinessHoursRepository>();

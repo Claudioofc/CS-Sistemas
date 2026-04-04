@@ -1,6 +1,5 @@
 using CSSistemas.API.Extensions;
 using CSSistemas.Application.Configuration;
-using CSSistemas.Application.DTOs.Support;
 using CSSistemas.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

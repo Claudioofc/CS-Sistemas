@@ -1,14 +1,14 @@
-using System.IO;
-using System.Net;
-using System.Net.Mail;
 using CSSistemas.Application.Configuration;
 using CSSistemas.Application.Interfaces;
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MimeKit;
 
 namespace CSSistemas.Infrastructure.Services;
 
-/// <summary>Envio de e-mail. Se SMTP não estiver configurado, apenas loga o link (desenvolvimento).</summary>
+/// <summary>Envio de e-mail via SMTP usando MailKit. Se não configurado, apenas loga (desenvolvimento).</summary>
 public class EmailSender : IEmailSender
 {
     private readonly EmailSettings _settings;
@@ -22,248 +22,176 @@ public class EmailSender : IEmailSender
 
     public async Task SendPasswordResetAsync(string email, string resetLink, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
+        if (!IsConfigured())
         {
             _logger.LogInformation("E-mail não configurado. Link de redefinição para {Email}: {Link}", email, resetLink);
-            await Task.CompletedTask;
             return;
         }
 
-        var smtpUser = _settings.SmtpUser?.Trim() ?? "";
-        var smtpPassword = _settings.SmtpPassword ?? "";
+        var message = BuildMessage(email, "Redefinição de senha - CS Sistemas",
+            $"Você solicitou a redefinição de senha.\n\nClique no link abaixo para definir uma nova senha (válido por 1 hora):\n\n{resetLink}\n\nSe você não solicitou isso, ignore este e-mail.\n\n— CS Sistemas");
 
-        if (string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPassword))
-        {
-            _logger.LogWarning("SMTP configurado mas usuário ou senha está vazio. Use senha de app (Gmail/Yahoo). Link: {Link}", resetLink);
-            await Task.CompletedTask;
-            return;
-        }
-
-        try
-        {
-            // Gmail e outros exigem TLS 1.2+
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
-
-            using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
-            {
-                EnableSsl = _settings.SmtpPort == 587 || _settings.SmtpPort == 465,
-                UseDefaultCredentials = false,
-                Credentials = new NetworkCredential(smtpUser, smtpPassword)
-            };
-
-            var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? smtpUser : _settings.FromEmail.Trim();
-            var mail = new MailMessage(from, email, "Redefinição de senha - CS Sistemas",
-                $"Clique no link abaixo para redefinir sua senha (válido por 1 hora):\n\n{resetLink}\n\nSe você não solicitou isso, ignore este e-mail.");
-            mail.BodyEncoding = System.Text.Encoding.UTF8;
-            await client.SendMailAsync(mail, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Falha ao enviar e-mail de redefinição para {Email}", email);
-            throw;
-        }
+        await SendAsync(message, cancellationToken);
     }
 
     public async Task SendAppointmentConfirmationAsync(string toEmail, string clientName, string scheduledAtFormatted, string serviceName, string businessName, string cancelLink, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
+        if (!IsConfigured())
         {
-            _logger.LogInformation("E-mail não configurado. Confirmação para {Email}: {BusinessName}, {ScheduledAt}. Link cancelar: {Link}", toEmail, businessName, scheduledAtFormatted, cancelLink);
-            await Task.CompletedTask;
+            _logger.LogInformation("E-mail não configurado. Confirmação para {Email}: {BusinessName}, {ScheduledAt}. Cancelar: {Link}", toEmail, businessName, scheduledAtFormatted, cancelLink);
             return;
         }
 
-        var smtpUser = _settings.SmtpUser?.Trim() ?? "";
-        var smtpPassword = _settings.SmtpPassword ?? "";
-        if (string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPassword))
-        {
-            _logger.LogWarning("SMTP configurado mas usuário ou senha vazio. Link cancelar: {Link}", cancelLink);
-            await Task.CompletedTask;
-            return;
-        }
-
-        try
-        {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
-            using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
-            {
-                EnableSsl = _settings.SmtpPort == 587 || _settings.SmtpPort == 465,
-                UseDefaultCredentials = false,
-                Credentials = new NetworkCredential(smtpUser, smtpPassword)
-            };
-            var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? smtpUser : _settings.FromEmail.Trim();
-            var body = $"Olá, {clientName}.\n\nSeu agendamento em {businessName} foi confirmado.\n\nServiço: {serviceName}\nData/hora: {scheduledAtFormatted}\n\nPara cancelar, use o link abaixo:\n{cancelLink}\n\n— CS Sistemas";
-            var mail = new MailMessage(from, toEmail, "Agendamento confirmado - " + businessName, body);
-            mail.BodyEncoding = System.Text.Encoding.UTF8;
-            await client.SendMailAsync(mail, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Falha ao enviar e-mail de confirmação para {Email}", toEmail);
-            throw;
-        }
+        var cancelBlock = string.IsNullOrWhiteSpace(cancelLink)
+            ? "\nPara cancelar, entre em contato com o estabelecimento."
+            : $"\nPara cancelar, use o link abaixo:\n{cancelLink}";
+        var body = $"Olá, {clientName}.\n\nSeu agendamento em {businessName} foi confirmado.\n\nServiço: {serviceName}\nData/hora: {scheduledAtFormatted}{cancelBlock}\n\n— CS Sistemas";
+        var message = BuildMessage(toEmail, "Agendamento confirmado - " + businessName, body);
+        await SendAsync(message, cancellationToken);
     }
 
     public async Task SendAppointmentCancelledByProfessionalAsync(string toEmail, string clientName, string scheduledAtFormatted, string businessName, string? cancellationReason = null, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
+        if (!IsConfigured())
         {
             _logger.LogInformation("E-mail não configurado. Cancelamento para {Email}: {BusinessName}, {ScheduledAt}", toEmail, businessName, scheduledAtFormatted);
-            await Task.CompletedTask;
             return;
         }
 
-        var smtpUser = _settings.SmtpUser?.Trim() ?? "";
-        var smtpPassword = _settings.SmtpPassword ?? "";
-        if (string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPassword))
+        var reasonBlock = !string.IsNullOrWhiteSpace(cancellationReason)
+            ? $"\nMotivo informado: {cancellationReason.Trim()}\n"
+            : "";
+        var body = $"Olá, {clientName}.\n\nInfelizmente seu agendamento em {businessName} para o dia {scheduledAtFormatted} foi cancelado.{reasonBlock}\nSe quiser reagendar, entre em contato com o estabelecimento.\n\n— CS Sistemas";
+        var message = BuildMessage(toEmail, "Agendamento cancelado - " + businessName, body);
+        await SendAsync(message, cancellationToken);
+    }
+
+    public async Task SendAppointmentCancelledByClientAsync(string toEmail, string clientName, string scheduledAtFormatted, string businessName, CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured())
         {
-            await Task.CompletedTask;
+            _logger.LogInformation("E-mail não configurado. Cancelamento pelo cliente para {Email}: {BusinessName}, {ScheduledAt}", toEmail, businessName, scheduledAtFormatted);
             return;
         }
 
-        try
-        {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
-            using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
-            {
-                EnableSsl = _settings.SmtpPort == 587 || _settings.SmtpPort == 465,
-                UseDefaultCredentials = false,
-                Credentials = new NetworkCredential(smtpUser, smtpPassword)
-            };
-            var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? smtpUser : _settings.FromEmail.Trim();
-            var reasonBlock = !string.IsNullOrWhiteSpace(cancellationReason)
-                ? $"\nMotivo informado: {cancellationReason.Trim()}\n\n"
-                : "\n\n";
-            var body = $"Olá, {clientName}.\n\nInfelizmente seu agendamento em {businessName} para o dia {scheduledAtFormatted} foi cancelado.{reasonBlock}Se quiser reagendar, entre em contato com o estabelecimento.\n\n— CS Sistemas";
-            var mail = new MailMessage(from, toEmail, "Agendamento cancelado - " + businessName, body);
-            mail.BodyEncoding = System.Text.Encoding.UTF8;
-            await client.SendMailAsync(mail, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Falha ao enviar e-mail de cancelamento para {Email}", toEmail);
-            throw;
-        }
+        var body = $"Olá, {clientName}.\n\nSeu agendamento em {businessName} para o dia {scheduledAtFormatted} foi cancelado com sucesso.\n\nSe quiser reagendar, acesse o link de agendamento do estabelecimento.\n\n— CS Sistemas";
+        var message = BuildMessage(toEmail, "Agendamento cancelado - " + businessName, body);
+        await SendAsync(message, cancellationToken);
     }
 
     public async Task SendNewUserRegisteredAsync(string toEmail, string newUserName, string newUserEmail, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
+        if (!IsConfigured())
         {
             _logger.LogInformation("E-mail não configurado. Novo usuário: {Name} ({Email})", newUserName, newUserEmail);
-            await Task.CompletedTask;
             return;
         }
 
-        var smtpUser = _settings.SmtpUser?.Trim() ?? "";
-        var smtpPassword = _settings.SmtpPassword ?? "";
-        if (string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPassword))
-        {
-            await Task.CompletedTask;
-            return;
-        }
-
-        try
-        {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
-            using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
-            {
-                EnableSsl = _settings.SmtpPort == 587 || _settings.SmtpPort == 465,
-                UseDefaultCredentials = false,
-                Credentials = new NetworkCredential(smtpUser, smtpPassword)
-            };
-            var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? smtpUser : _settings.FromEmail.Trim();
-            var body = $"Um novo usuário se cadastrou no sistema.\n\nNome: {newUserName}\nE-mail: {newUserEmail}\n\n— CS Sistemas";
-            var mail = new MailMessage(from, toEmail, "Novo cadastro - CS Sistemas", body);
-            mail.BodyEncoding = System.Text.Encoding.UTF8;
-            await client.SendMailAsync(mail, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Falha ao enviar e-mail de novo cadastro para {Email}", toEmail);
-            throw;
-        }
+        var body = $"Um novo usuário se cadastrou no sistema.\n\nNome: {newUserName}\nE-mail: {newUserEmail}\n\n— CS Sistemas";
+        var message = BuildMessage(toEmail, "Novo cadastro - CS Sistemas", body);
+        await SendAsync(message, cancellationToken);
     }
 
     public async Task SendWelcomeToNewUserAsync(string toEmail, string userName, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
+        if (!IsConfigured())
         {
             _logger.LogInformation("E-mail não configurado. Boas-vindas para: {Name} ({Email})", userName, toEmail);
-            await Task.CompletedTask;
             return;
         }
 
-        var smtpUser = _settings.SmtpUser?.Trim() ?? "";
-        var smtpPassword = _settings.SmtpPassword ?? "";
-        if (string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPassword))
-        {
-            await Task.CompletedTask;
-            return;
-        }
-
-        try
-        {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
-            using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
-            {
-                EnableSsl = _settings.SmtpPort == 587 || _settings.SmtpPort == 465,
-                UseDefaultCredentials = false,
-                Credentials = new NetworkCredential(smtpUser, smtpPassword)
-            };
-            var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? smtpUser : _settings.FromEmail.Trim();
-            var body = WelcomeEmailContent.BuildPlainTextBody(userName);
-            var mail = new MailMessage(from, toEmail, WelcomeEmailContent.Subject, body);
-            mail.BodyEncoding = System.Text.Encoding.UTF8;
-            await client.SendMailAsync(mail, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Falha ao enviar e-mail de boas-vindas para {Email}", toEmail);
-            throw;
-        }
+        var message = BuildMessage(toEmail, WelcomeEmailContent.Subject, WelcomeEmailContent.BuildPlainTextBody(userName));
+        await SendAsync(message, cancellationToken);
     }
 
     public async Task SendSupportRequestAsync(string toEmail, string userName, string userEmail, string message, string? pageUrl = null, byte[]? attachment = null, string? attachmentFileName = null, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.SmtpHost))
+        if (!IsConfigured())
         {
             _logger.LogInformation("E-mail não configurado. Suporte: {Name} ({Email}): {Message}", userName, userEmail, message);
-            await Task.CompletedTask;
             return;
         }
 
-        var smtpUser = _settings.SmtpUser?.Trim() ?? "";
-        var smtpPassword = _settings.SmtpPassword ?? "";
-        if (string.IsNullOrEmpty(smtpUser) || string.IsNullOrEmpty(smtpPassword))
+        var body = SupportRequestEmailContent.BuildPlainTextBody(userName, userEmail, message, pageUrl);
+        var mimeMessage = BuildMessage(toEmail, SupportRequestEmailContent.Subject, body);
+
+        if (attachment != null && !string.IsNullOrWhiteSpace(attachmentFileName))
         {
-            await Task.CompletedTask;
-            return;
+            var builder = new BodyBuilder { TextBody = body };
+            builder.Attachments.Add(attachmentFileName, attachment);
+            mimeMessage.Body = builder.ToMessageBody();
         }
 
+        await SendAsync(mimeMessage, cancellationToken);
+    }
+
+    public async Task SendSubscriptionExpiryWarningAsync(string toEmail, string userName, string planName, string endsAtFormatted, int daysRemaining, CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured())
+        {
+            _logger.LogInformation("E-mail não configurado. Aviso de vencimento para {Email}: plano {Plan}, vence em {Days} dias", toEmail, planName, daysRemaining);
+            return;
+        }
+        var body = $"Olá, {userName}.\n\nSua assinatura {planName} vence em {daysRemaining} dia(s) ({endsAtFormatted}).\n\nRenove agora mesmo para continuar usando o CS Sistemas sem interrupções.\n\n— CS Sistemas";
+        var message = BuildMessage(toEmail, $"Sua assinatura vence em {daysRemaining} dia(s) - CS Sistemas", body);
+        await SendAsync(message, cancellationToken);
+    }
+
+    public async Task SendAppointmentReminderAsync(string toEmail, string clientName, string scheduledAtFormatted, string serviceName, string businessName, string cancelLink, CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured())
+        {
+            _logger.LogInformation("E-mail não configurado. Lembrete para {Email}: {BusinessName}, {ScheduledAt}", toEmail, businessName, scheduledAtFormatted);
+            return;
+        }
+        var body = $"Olá, {clientName}.\n\nEste é um lembrete do seu agendamento em {businessName}.\n\nServiço: {serviceName}\nData/hora: {scheduledAtFormatted}\n\nCaso precise cancelar, use o link abaixo:\n{cancelLink}\n\n— CS Sistemas";
+        var message = BuildMessage(toEmail, "Lembrete de agendamento - " + businessName, body);
+        await SendAsync(message, cancellationToken);
+    }
+
+    // -------------------------------------------------------------------------
+
+    private bool IsConfigured()
+    {
+        return !string.IsNullOrWhiteSpace(_settings.SmtpHost)
+            && !string.IsNullOrWhiteSpace(_settings.SmtpUser)
+            && !string.IsNullOrWhiteSpace(_settings.SmtpPassword);
+    }
+
+    private MimeMessage BuildMessage(string toEmail, string subject, string plainTextBody)
+    {
+        var from = string.IsNullOrWhiteSpace(_settings.FromEmail)
+            ? _settings.SmtpUser!.Trim()
+            : _settings.FromEmail.Trim();
+
+        var fromName = string.IsNullOrWhiteSpace(_settings.FromName) ? "CS Sistemas" : _settings.FromName;
+
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress(fromName, from));
+        message.To.Add(MailboxAddress.Parse(toEmail));
+        message.Subject = subject;
+        message.Body = new TextPart("plain") { Text = plainTextBody };
+        return message;
+    }
+
+    private async Task SendAsync(MimeMessage message, CancellationToken cancellationToken)
+    {
         try
         {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
-            using var client = new SmtpClient(_settings.SmtpHost, _settings.SmtpPort)
-            {
-                EnableSsl = _settings.SmtpPort == 587 || _settings.SmtpPort == 465,
-                UseDefaultCredentials = false,
-                Credentials = new NetworkCredential(smtpUser, smtpPassword)
-            };
-            var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? smtpUser : _settings.FromEmail.Trim();
-            var body = SupportRequestEmailContent.BuildPlainTextBody(userName, userEmail, message, pageUrl);
-            var mail = new MailMessage(from, toEmail, SupportRequestEmailContent.Subject, body);
-            mail.BodyEncoding = System.Text.Encoding.UTF8;
-            if (attachment != null && !string.IsNullOrWhiteSpace(attachmentFileName))
-            {
-                using var attachmentStream = new MemoryStream(attachment);
-                mail.Attachments.Add(new Attachment(attachmentStream, attachmentFileName));
-            }
-            await client.SendMailAsync(mail, cancellationToken);
+            using var client = new SmtpClient();
+
+            var secureOption = _settings.SmtpPort == 465
+                ? SecureSocketOptions.SslOnConnect
+                : SecureSocketOptions.StartTls;
+
+            await client.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, secureOption, cancellationToken);
+            await client.AuthenticateAsync(_settings.SmtpUser, _settings.SmtpPassword, cancellationToken);
+            await client.SendAsync(message, cancellationToken);
+            await client.DisconnectAsync(true, cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Falha ao enviar e-mail de suporte para {Email}", toEmail);
+            _logger.LogError(ex, "Falha ao enviar e-mail para {To}", message.To);
             throw;
         }
     }

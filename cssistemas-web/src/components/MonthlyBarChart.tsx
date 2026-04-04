@@ -1,6 +1,7 @@
 /**
  * Gráfico de barras por mês — reutilizado em Dashboard (Relatório Financeiro) e Ganhos.
  */
+import { motion } from 'framer-motion'
 
 type BarItem = { label: string; value: number }
 
@@ -39,9 +40,12 @@ export default function MonthlyBarChart({
           const title = getBarTitle ? getBarTitle(item) : (item.value > 0 ? formatValue(item.value) : item.label)
           return (
             <div key={i} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-0.5 sm:gap-1 h-full">
-              <div
-                className="w-full rounded-t bg-primary/80 min-h-[4px] transition-all flex-shrink-0"
-                style={{ height: Math.max(barHeight, 0) }}
+              <motion.div
+                className="w-full rounded-t bg-primary/80 min-h-[4px] flex-shrink-0"
+                initial={{ scaleY: 0, originY: 1 }}
+                animate={{ scaleY: 1 }}
+                transition={{ delay: i * 0.04, duration: 0.5, ease: "easeOut" }}
+                style={{ height: Math.max(barHeight, 4), transformOrigin: 'bottom' }}
                 title={title}
               />
               <span className="text-[10px] sm:text-xs text-gray-500 truncate w-full text-center flex-shrink-0">

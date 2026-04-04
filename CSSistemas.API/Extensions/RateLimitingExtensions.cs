@@ -13,6 +13,14 @@ public static class RateLimitingExtensions
         {
             options.RejectionStatusCode = 429;
 
+            // Limiter estrito para login/registro (5 tentativas/min por IP)
+            options.AddFixedWindowLimiter("auth", o =>
+            {
+                o.PermitLimit = 5;
+                o.Window = TimeSpan.FromMinutes(1);
+                o.QueueLimit = 0;
+            });
+
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",

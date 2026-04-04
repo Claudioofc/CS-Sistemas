@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using CSSistemas.Application.Configuration;
 using CSSistemas.Application.Interfaces;
@@ -36,6 +38,14 @@ public class MercadoPagoWebhookController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> MercadoPagoOrder([FromBody] MercadoPagoWebhookPayload payload, CancellationToken cancellationToken)
     {
+        // Valida assinatura HMAC-SHA256 se WebhookSecret estiver configurado
+        var webhookSecret = _payment.MercadoPago.WebhookSecret;
+        if (!string.IsNullOrWhiteSpace(webhookSecret))
+        {
+            if (!ValidateSignature(Request.Headers, payload?.Data?.Id, webhookSecret))
+                return Ok(); // Retorna 200 para não revelar que a assinatura falhou
+        }
+
         // Resposta imediata para o MP não reenviar
         if (payload?.Data?.Id == null)
             return Ok();
@@ -74,6 +84,47 @@ public class MercadoPagoWebhookController : ControllerBase
         await _subscriptionRepository.AddAsync(subscription, cancellationToken);
 
         return Ok();
+    }
+
+    /// <summary>
+    /// Valida a assinatura HMAC-SHA256 do Mercado Pago.
+    /// Header x-signature: ts=TIMESTAMP,v1=HASH
+    /// Header x-request-id: REQUEST_ID
+    /// Mensagem assinada: id:DATA_ID;request-id:REQUEST_ID;ts:TIMESTAMP
+    /// </summary>
+    private static bool ValidateSignature(IHeaderDictionary headers, string? dataId, string secret)
+    {
+        try
+        {
+            var xSignature = headers["x-signature"].FirstOrDefault();
+            var xRequestId = headers["x-request-id"].FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(xSignature) || string.IsNullOrWhiteSpace(dataId))
+                return false;
+
+            // Parse ts e v1 do header x-signature
+            string? ts = null, v1 = null;
+            foreach (var part in xSignature.Split(','))
+            {
+                var kv = part.Split('=', 2);
+                if (kv.Length == 2)
+                {
+                    if (kv[0].Trim() == "ts") ts = kv[1].Trim();
+                    else if (kv[0].Trim() == "v1") v1 = kv[1].Trim();
+                }
+            }
+            if (string.IsNullOrWhiteSpace(ts) || string.IsNullOrWhiteSpace(v1))
+                return false;
+
+            var manifest = $"id:{dataId};request-id:{xRequestId ?? ""};ts:{ts}";
+            var key = Encoding.UTF8.GetBytes(secret);
+            var data = Encoding.UTF8.GetBytes(manifest);
+            var hash = Convert.ToHexString(HMACSHA256.HashData(key, data)).ToLowerInvariant();
+            return hash == v1.ToLowerInvariant();
+        }
+        catch
+        {
+            return false;
+        }
     }
 }
 

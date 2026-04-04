@@ -19,4 +19,7 @@ public interface ISubscriptionRepository
     Task<IReadOnlyList<Subscription>> GetPremiumSubscriptionsOrderedByStartedAtAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task AddAsync(Subscription subscription, CancellationToken cancellationToken = default);
+    Task UpdateAsync(Subscription subscription, CancellationToken cancellationToken = default);
+    /// <summary>Retorna assinaturas ativas (Monthly) que vencem em ~daysBeforeExpiry dias e ainda não tiveram o aviso enviado.</summary>
+    Task<IReadOnlyList<Subscription>> GetExpiringForWarningAsync(int daysBeforeExpiry, CancellationToken cancellationToken = default);
 }

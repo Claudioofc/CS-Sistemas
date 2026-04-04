@@ -13,7 +13,6 @@ public class AppDbContext : DbContext
     public DbSet<Service> Services => Set<Service>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Client> Clients => Set<Client>();
-    public DbSet<SystemMessage> SystemMessages => Set<SystemMessage>();
     public DbSet<BusinessHours> BusinessHours => Set<BusinessHours>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Plan> Plans => Set<Plan>();
@@ -50,7 +49,6 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
             entity.Property(e => e.PublicSlug).HasMaxLength(100);
-            entity.Property(e => e.WhatsAppPhone).HasMaxLength(20);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasIndex(e => e.PublicSlug).IsUnique().HasFilter("\"PublicSlug\" IS NOT NULL AND \"IsDeleted\" = false");
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
@@ -90,17 +88,6 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Notes).HasMaxLength(1000);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasOne(e => e.Business).WithMany(b => b.Clients).HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
-        });
-
-        modelBuilder.Entity<SystemMessage>(entity =>
-        {
-            entity.ToTable("SystemMessages");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Key).HasMaxLength(100).IsRequired();
-            entity.Property(e => e.Title).HasMaxLength(200).IsRequired();
-            entity.Property(e => e.Body).HasMaxLength(4000);
-            entity.HasQueryFilter(e => !e.IsDeleted);
-            entity.HasOne(e => e.Business).WithMany(b => b.SystemMessages).HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<BusinessHours>(entity =>

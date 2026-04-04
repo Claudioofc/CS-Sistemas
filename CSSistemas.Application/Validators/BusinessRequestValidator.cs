@@ -17,7 +17,5 @@ public class BusinessRequestValidator : AbstractValidator<BusinessRequest>
             .Matches("^[a-z0-9_-]*$").When(x => !string.IsNullOrEmpty(x.PublicSlug))
             .WithMessage("Slug pode conter apenas letras minúsculas, números, hífen e underscore.");
 
-        RuleFor(x => x.WhatsAppPhone)
-            .MaximumLength(20).When(x => !string.IsNullOrEmpty(x.WhatsAppPhone));
     }
 }

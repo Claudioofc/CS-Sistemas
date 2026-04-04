@@ -23,6 +23,7 @@ public class PublicBookingController : ControllerBase
     private readonly INotificationRepository _notificationRepo;
     private readonly IAvailabilityService _availabilityService;
     private readonly IEmailSender _emailSender;
+    private readonly IWhatsAppSender _whatsAppSender;
     private readonly IConfiguration _config;
     private readonly IValidator<CreatePublicAppointmentRequest> _validator;
     private readonly ILogger<PublicBookingController> _logger;
@@ -34,6 +35,7 @@ public class PublicBookingController : ControllerBase
         INotificationRepository notificationRepo,
         IAvailabilityService availabilityService,
         IEmailSender emailSender,
+        IWhatsAppSender whatsAppSender,
         IConfiguration config,
         IValidator<CreatePublicAppointmentRequest> validator,
         ILogger<PublicBookingController> logger)
@@ -44,6 +46,7 @@ public class PublicBookingController : ControllerBase
         _notificationRepo = notificationRepo;
         _availabilityService = availabilityService;
         _emailSender = emailSender;
+        _whatsAppSender = whatsAppSender;
         _config = config;
         _validator = validator;
         _logger = logger;
@@ -120,13 +123,25 @@ public class PublicBookingController : ControllerBase
         var notification = Notification.CreateNewAppointment(business.UserId, request.ClientName, scheduledAt, appointment.Id);
         await _notificationRepo.AddAsync(notification, cancellationToken);
 
-        var baseUrl = _config["Email:PasswordResetBaseUrl"]?.Trim() ?? "";
-        if (!string.IsNullOrEmpty(baseUrl) && !string.IsNullOrEmpty(request.ClientEmail))
-        {
-            var cancelLink = $"{baseUrl.TrimEnd('/')}/agendar/cancelar?token={Uri.EscapeDataString(appointment.CancelToken!)}";
-            var scheduledFormatted = BrazilTimeHelper.FormatUtcToBrazilDateTime(scheduledAt);
+        // Usa BaseBookingUrl como primário; Email:PasswordResetBaseUrl como fallback (legado)
+        var baseUrl = (_config["BaseBookingUrl"]?.Trim()
+                    ?? _config["Email:PasswordResetBaseUrl"]?.Trim()
+                    ?? "").TrimEnd('/');
+        var cancelLink = string.IsNullOrEmpty(baseUrl)
+            ? ""
+            : $"{baseUrl}/agendar/cancelar?token={Uri.EscapeDataString(appointment.CancelToken!)}";
+        var scheduledFormatted = BrazilTimeHelper.FormatUtcToBrazilDateTime(scheduledAt);
+
+        if (!string.IsNullOrEmpty(request.ClientEmail))
             await _emailSender.SendAppointmentConfirmationAsync(
                 request.ClientEmail, request.ClientName, scheduledFormatted, service.Name, business.Name, cancelLink, cancellationToken);
+
+        if (!string.IsNullOrEmpty(request.ClientPhone))
+        {
+            var whatsMsg = cancelLink != null
+                ? $"Olá, {request.ClientName}! Seu agendamento em {business.Name} foi confirmado para {scheduledFormatted}. Serviço: {service.Name}. Para cancelar: {cancelLink}"
+                : $"Olá, {request.ClientName}! Seu agendamento em {business.Name} foi confirmado para {scheduledFormatted}. Serviço: {service.Name}.";
+            await _whatsAppSender.SendTextAsync(request.ClientPhone, whatsMsg, cancellationToken);
         }
 
         return CreatedAtAction(nameof(GetBySlug), new { slug }, new AppointmentCreatedDto(
@@ -165,6 +180,16 @@ public class PublicBookingController : ControllerBase
         {
             _logger.LogWarning(ex, "Notificação de cancelamento pelo cliente não foi criada. Agendamento já cancelado. AppointmentId: {Id}", appointment.Id);
         }
+
+        var cancelledFormatted = BrazilTimeHelper.FormatUtcToBrazilDateTime(appointment.ScheduledAt);
+
+        if (!string.IsNullOrEmpty(appointment.ClientEmail))
+            await _emailSender.SendAppointmentCancelledByClientAsync(
+                appointment.ClientEmail, appointment.ClientName, cancelledFormatted, business.Name, cancellationToken);
+
+        if (!string.IsNullOrEmpty(appointment.ClientPhone))
+            await _whatsAppSender.SendTextAsync(appointment.ClientPhone,
+                $"Olá, {appointment.ClientName}! Seu agendamento em {business.Name} para {cancelledFormatted} foi cancelado com sucesso.", cancellationToken);
 
         return Ok(new { message = "Agendamento cancelado com sucesso." });
     }

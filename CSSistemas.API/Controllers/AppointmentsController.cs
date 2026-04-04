@@ -24,6 +24,7 @@ public class AppointmentsController : ControllerBase
     private readonly IEmailSender _emailSender;
     private readonly IValidator<AppointmentRequest> _validator;
     private readonly IValidator<AppointmentStatusRequest> _statusValidator;
+    private readonly IConfiguration _config;
 
     public AppointmentsController(
         IAppointmentRepository repository,
@@ -31,7 +32,8 @@ public class AppointmentsController : ControllerBase
         IServiceRepository serviceRepository,
         IEmailSender emailSender,
         IValidator<AppointmentRequest> validator,
-        IValidator<AppointmentStatusRequest> statusValidator)
+        IValidator<AppointmentStatusRequest> statusValidator,
+        IConfiguration config)
     {
         _repository = repository;
         _businessRepository = businessRepository;
@@ -39,6 +41,7 @@ public class AppointmentsController : ControllerBase
         _emailSender = emailSender;
         _validator = validator;
         _statusValidator = statusValidator;
+        _config = config;
     }
 
     /// <summary>Lista agendamentos de um negócio com filtro por nome/telefone e paginação.</summary>
@@ -103,7 +106,20 @@ public class AppointmentsController : ControllerBase
         var appointment = Appointment.Create(
             request.BusinessId, request.ServiceId, request.ClientName, scheduledAt,
             request.ClientPhone, request.ClientEmail, request.Notes);
+        appointment.SetCancelToken(Guid.NewGuid().ToString("N"));
         await _repository.AddAsync(appointment, cancellationToken);
+
+        if (!string.IsNullOrEmpty(request.ClientEmail))
+        {
+            var baseUrl = (_config["BaseBookingUrl"]?.Trim() ?? "").TrimEnd('/');
+            var cancelLink = string.IsNullOrEmpty(baseUrl)
+                ? ""
+                : $"{baseUrl}/agendar/cancelar?token={Uri.EscapeDataString(appointment.CancelToken!)}";
+            var scheduledFormatted = BrazilTimeHelper.FormatUtcToBrazilDateTime(scheduledAt);
+            await _emailSender.SendAppointmentConfirmationAsync(
+                request.ClientEmail, request.ClientName, scheduledFormatted, service.Name, business.Name, cancelLink, cancellationToken);
+        }
+
         return CreatedAtAction(nameof(GetById), new { id = appointment.Id, businessId = appointment.BusinessId }, ToResponse(appointment));
     }
 

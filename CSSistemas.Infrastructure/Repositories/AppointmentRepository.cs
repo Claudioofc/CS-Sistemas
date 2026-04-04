@@ -93,13 +93,8 @@ public class AppointmentRepository : IAppointmentRepository
         var start = scheduledAt.Kind == DateTimeKind.Utc ? scheduledAt : DateTime.SpecifyKind(scheduledAt, DateTimeKind.Utc);
         var end = start.AddMinutes(durationMinutes);
 
-        var query = _context.Appointments
-            .Where(a => a.BusinessId == businessId && a.Status != AppointmentStatus.Cancelled)
-            .Where(a => a.ScheduledAt < end && EF.Property<DateTime>(a, "ScheduledAt").AddMinutes(0) + TimeSpan.FromMinutes(0) < end);
-
         // Overlap: existing_start < new_end AND existing_end > new_start
-        // existing_end = ScheduledAt + Duration (we need Service.DurationMinutes). Simpler: load appointments in range and check in memory, or use raw SQL.
-        // EF doesn't have direct access to Service.DurationMinutes in same table. So we need to join Service or load appointments that start in [start - maxDuration, end + maxDuration]. For simplicity, check appointments that start in [start - 480, end + 480] (8h window) and then filter by overlap in memory. Better: get appointments where ScheduledAt < end, and for each we need end time. So join with Services.
+        // Carrega candidatos com ScheduledAt < new_end e filtra o fim real em memória (requer Service.DurationMinutes).
         var candidates = await _context.Appointments
             .AsNoTracking()
             .Include(a => a.Service)
@@ -138,5 +133,21 @@ public class AppointmentRepository : IAppointmentRepository
         appointment.MarkAsDeleted();
         await _context.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<IReadOnlyList<Appointment>> GetUpcomingWithoutReminderAsync(DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        var f = from.Kind == DateTimeKind.Utc ? from : DateTime.SpecifyKind(from, DateTimeKind.Utc);
+        var t = to.Kind == DateTimeKind.Utc ? to : DateTime.SpecifyKind(to, DateTimeKind.Utc);
+        return await _context.Appointments
+            .Include(a => a.Business)
+            .Include(a => a.Service)
+            .Where(a => a.ScheduledAt >= f
+                     && a.ScheduledAt <= t
+                     && a.DeletedAt == null
+                     && a.Status != AppointmentStatus.Cancelled
+                     && a.ReminderSentAt == null
+                     && a.ClientEmail != null)
+            .ToListAsync(cancellationToken);
     }
 }

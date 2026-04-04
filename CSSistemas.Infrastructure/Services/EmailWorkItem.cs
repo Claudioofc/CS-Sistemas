@@ -20,14 +20,20 @@ public sealed record EmailWorkItem(
     string? SupportRequestPageUrl = null,
     byte[]? SupportRequestAttachment = null,
     string? SupportRequestAttachmentFileName = null,
-    string? WelcomeUserName = null);
+    string? WelcomeUserName = null,
+    string? ExpiryWarningPlanName = null,
+    string? ExpiryWarningEndsAt = null,
+    int? ExpiryWarningDays = null);
 
 public enum EmailWorkItemKind
 {
     PasswordReset,
     AppointmentConfirmation,
     AppointmentCancelledByProfessional,
+    AppointmentCancelledByClient,
     NewUserRegistered,
     NewUserWelcome,
-    SupportRequest
+    SupportRequest,
+    SubscriptionExpiryWarning,
+    AppointmentReminder
 }
