@@ -29,3 +29,10 @@ export type BusinessItem = {
   businessType: number
   publicSlug?: string | null
 }
+
+export type EmployeeItem = {
+  id: string
+  name: string
+  role?: string | null
+  isActive: boolean
+}

@@ -16,17 +16,20 @@ public class AvailabilityService : IAvailabilityService
     private readonly IBusinessHoursRepository _hoursRepo;
     private readonly IServiceRepository _serviceRepo;
     private readonly IAppointmentRepository _appointmentRepo;
+    private readonly IEmployeeRepository _employeeRepo;
     private readonly ILogger<AvailabilityService> _logger;
 
     public AvailabilityService(
         IBusinessHoursRepository hoursRepo,
         IServiceRepository serviceRepo,
         IAppointmentRepository appointmentRepo,
+        IEmployeeRepository employeeRepo,
         ILogger<AvailabilityService> logger)
     {
         _hoursRepo = hoursRepo;
         _serviceRepo = serviceRepo;
         _appointmentRepo = appointmentRepo;
+        _employeeRepo = employeeRepo;
         _logger = logger;
     }
 
@@ -73,7 +76,7 @@ public class AvailabilityService : IAvailabilityService
             if (utcStart < DateTime.UtcNow)
                 continue;
 
-            var hasConflict = await _appointmentRepo.HasConflictAsync(businessId, utcStart, duration, null, cancellationToken);
+            var hasConflict = await _appointmentRepo.HasConflictAsync(businessId, utcStart, duration, null, null, null, cancellationToken);
             if (!hasConflict)
                 slots.Add(utcStart);
         }
@@ -81,7 +84,7 @@ public class AvailabilityService : IAvailabilityService
         return slots;
     }
 
-    public async Task<IReadOnlyList<SlotWithAvailabilityDto>> GetSlotsWithAvailabilityAsync(Guid businessId, Guid serviceId, DateTime date, int slotIntervalMinutes = 30, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SlotWithAvailabilityDto>> GetSlotsWithAvailabilityAsync(Guid businessId, Guid serviceId, DateTime date, int slotIntervalMinutes = 30, Guid? employeeId = null, CancellationToken cancellationToken = default)
     {
         var service = await _serviceRepo.GetByIdAndBusinessIdAsync(serviceId, businessId, cancellationToken);
         if (service == null || !service.IsActive)
@@ -110,6 +113,15 @@ public class AvailabilityService : IAvailabilityService
         if (closeMin - openMin < duration)
             return Array.Empty<SlotWithAvailabilityDto>();
 
+        // Capacidade: se não filtrou por funcionário, considera quantos funcionários ativos o negócio tem
+        int? capacity = null;
+        if (!employeeId.HasValue)
+        {
+            var activeCount = await _employeeRepo.CountActiveByBusinessIdAsync(businessId, cancellationToken);
+            if (activeCount > 0)
+                capacity = activeCount;
+        }
+
         var result = new List<SlotWithAvailabilityDto>();
 
         for (var minute = openMin; minute + duration <= closeMin; minute += slotIntervalMinutes)
@@ -120,7 +132,7 @@ public class AvailabilityService : IAvailabilityService
             if (utcStart < DateTime.UtcNow)
                 continue;
 
-            var hasConflict = await _appointmentRepo.HasConflictAsync(businessId, utcStart, duration, null, cancellationToken);
+            var hasConflict = await _appointmentRepo.HasConflictAsync(businessId, utcStart, duration, null, employeeId, capacity, cancellationToken);
             result.Add(new SlotWithAvailabilityDto(utcStart, !hasConflict));
         }
 

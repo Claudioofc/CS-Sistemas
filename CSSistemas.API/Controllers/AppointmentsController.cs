@@ -101,7 +101,7 @@ public class AppointmentsController : ControllerBase
         var service = await _serviceRepository.GetByIdAndBusinessIdAsync(request.ServiceId, request.BusinessId, cancellationToken);
         if (service == null) throw CommException.NotFound("Serviço não encontrado ou não pertence ao negócio.");
         var scheduledAt = request.ScheduledAt.Kind == DateTimeKind.Utc ? request.ScheduledAt : DateTime.SpecifyKind(request.ScheduledAt, DateTimeKind.Utc);
-        var hasConflict = await _repository.HasConflictAsync(request.BusinessId, scheduledAt, service.DurationMinutes, null, cancellationToken);
+        var hasConflict = await _repository.HasConflictAsync(request.BusinessId, scheduledAt, service.DurationMinutes, null, null, null, cancellationToken);
         if (hasConflict) throw CommException.Conflict("Já existe um agendamento neste horário.");
         var appointment = Appointment.Create(
             request.BusinessId, request.ServiceId, request.ClientName, scheduledAt,

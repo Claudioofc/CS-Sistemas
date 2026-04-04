@@ -17,9 +17,14 @@ public class Appointment : EntityBase
     public string? CancelToken { get; protected set; }
     /// <summary>Quando foi enviado o lembrete de agendamento por e-mail/WhatsApp.</summary>
     public DateTime? ReminderSentAt { get; protected set; }
+    /// <summary>Funcionário responsável pelo atendimento. Null = sem preferência / negócio sem funcionários.</summary>
+    public Guid? EmployeeId { get; protected set; }
+    /// <summary>Nome do funcionário no momento do agendamento (desnormalizado para exibição).</summary>
+    public string? EmployeeName { get; protected set; }
 
     public Business Business { get; protected set; } = null!;
     public Service Service { get; protected set; } = null!;
+    public Employee? Employee { get; protected set; }
 
     protected Appointment() { }
 
@@ -30,7 +35,9 @@ public class Appointment : EntityBase
         DateTime scheduledAt,
         string? clientPhone = null,
         string? clientEmail = null,
-        string? notes = null)
+        string? notes = null,
+        Guid? employeeId = null,
+        string? employeeName = null)
     {
         if (businessId == Guid.Empty)
             throw new ArgumentException("BusinessId é obrigatório.", nameof(businessId));
@@ -49,7 +56,9 @@ public class Appointment : EntityBase
             ClientPhone = string.IsNullOrWhiteSpace(clientPhone) ? null : clientPhone.Trim(),
             ClientEmail = string.IsNullOrWhiteSpace(clientEmail) ? null : clientEmail.Trim().ToLowerInvariant(),
             ScheduledAt = scheduledAt,
-            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim()
+            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
+            EmployeeId = employeeId == Guid.Empty ? null : employeeId,
+            EmployeeName = string.IsNullOrWhiteSpace(employeeName) ? null : employeeName.Trim()
         };
     }
 

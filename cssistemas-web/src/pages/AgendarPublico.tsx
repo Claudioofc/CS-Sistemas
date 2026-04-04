@@ -7,6 +7,7 @@ import { formatDateAndTime, formatTimeOnly } from '../utils/format'
 type PublicBusiness = { id: string; name: string; publicSlug: string | null }
 type PublicService = { id: string; name: string; durationMinutes: number; price: number | null }
 type SlotWithAvailability = { scheduledAtUtc: string; available: boolean }
+type PublicEmployee = { id: string; name: string; role?: string | null }
 
 export default function AgendarPublico() {
   const { slug } = useParams<{ slug: string }>()
@@ -16,6 +17,8 @@ export default function AgendarPublico() {
   const [error, setError] = useState('')
 
   const [selectedServiceId, setSelectedServiceId] = useState<string>('')
+  const [employees, setEmployees] = useState<PublicEmployee[]>([])
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('')
   const [selectedDate, setSelectedDate] = useState('')
   const [slots, setSlots] = useState<SlotWithAvailability[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
@@ -45,6 +48,9 @@ export default function AgendarPublico() {
     apiGet<PublicService[]>(`/api/public/booking/${slug}/services`, null).then((res) => {
       if (res.ok) setServices(res.data)
     })
+    apiGet<PublicEmployee[]>(`/api/public/booking/${slug}/employees`, null).then((res) => {
+      if (res.ok) setEmployees(res.data)
+    })
   }, [slug, business])
 
   useEffect(() => {
@@ -55,12 +61,12 @@ export default function AgendarPublico() {
     setLoadingSlots(true)
     setSlots([])
     setSelectedSlotUtc('')
-    const dateParam = selectedDate
-    apiGet<SlotWithAvailability[]>(`/api/public/booking/${slug}/slots?serviceId=${selectedServiceId}&date=${dateParam}`, null).then((res) => {
+    const empParam = selectedEmployeeId ? `&employeeId=${selectedEmployeeId}` : ''
+    apiGet<SlotWithAvailability[]>(`/api/public/booking/${slug}/slots?serviceId=${selectedServiceId}&date=${selectedDate}${empParam}`, null).then((res) => {
       setLoadingSlots(false)
       if (res.ok) setSlots(res.data)
     })
-  }, [slug, selectedServiceId, selectedDate])
+  }, [slug, selectedServiceId, selectedDate, selectedEmployeeId])
 
   const minDate = new Date().toISOString().slice(0, 10)
 
@@ -75,6 +81,7 @@ export default function AgendarPublico() {
       scheduledAt: selectedSlotUtc,
       clientPhone: clientPhone.trim() || null,
       clientEmail: clientEmail.trim() || null,
+      employeeId: selectedEmployeeId || null,
     }
     const res = await apiPost<typeof body, { id: string; clientName: string; scheduledAt: string }>(
       `/api/public/booking/${slug}/appointments`,
@@ -161,6 +168,25 @@ export default function AgendarPublico() {
               ))}
             </select>
           </div>
+
+          {employees.length > 0 && (
+            <div>
+              <label htmlFor="employee" className="block text-sm font-medium text-gray-700 mb-1">Profissional</label>
+              <select
+                id="employee"
+                value={selectedEmployeeId}
+                onChange={(e) => { setSelectedEmployeeId(e.target.value); setSelectedSlotUtc('') }}
+                className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-900 focus:ring-2 focus:ring-primary focus:border-primary"
+              >
+                <option value="">Sem preferência</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name}{emp.role ? ` — ${emp.role}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">Data *</label>

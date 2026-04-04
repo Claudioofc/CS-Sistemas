@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<Employee> Employees => Set<Employee>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,9 +74,21 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ClientEmail).HasMaxLength(256);
             entity.Property(e => e.Notes).HasMaxLength(1000);
             entity.Property(e => e.CancelToken).HasMaxLength(64);
+            entity.Property(e => e.EmployeeName).HasMaxLength(200);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasOne(e => e.Business).WithMany(b => b.Appointments).HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Service).WithMany(s => s.Appointments).HasForeignKey(e => e.ServiceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Employee).WithMany(emp => emp.Appointments).HasForeignKey(e => e.EmployeeId).OnDelete(DeleteBehavior.SetNull).IsRequired(false);
+        });
+
+        modelBuilder.Entity<Employee>(entity =>
+        {
+            entity.ToTable("Employees");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Role).HasMaxLength(100);
+            entity.HasQueryFilter(e => !e.IsDeleted);
+            entity.HasOne(e => e.Business).WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Client>(entity =>

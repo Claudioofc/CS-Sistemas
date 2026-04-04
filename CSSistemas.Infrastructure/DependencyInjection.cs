@@ -57,6 +57,7 @@ public static class DependencyInjection
         services.AddHostedService<EmailQueueHostedService>();
         services.AddHostedService<SubscriptionExpiryWarningService>();
         services.AddHostedService<AppointmentReminderService>();
+        services.AddScoped<IEmployeeRepository, EmployeeRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBusinessRepository, BusinessRepository>();
         services.AddScoped<IServiceRepository, ServiceRepository>();

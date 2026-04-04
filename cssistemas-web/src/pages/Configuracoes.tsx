@@ -3,9 +3,9 @@ import { useAuth } from '../contexts/AuthContext'
 import type { DocumentType } from '../contexts/AuthContext'
 import InputWithIcon from '../components/ui/InputWithIcon'
 import { formatDocument, filterDocumentInput, getDocumentPlaceholder, getDocumentMaxLength } from '../utils/document'
-import { apiGet, apiPostWithAuth, apiPut, apiUploadProfilePhoto, getProfilePhotoUrl } from '../api/client'
+import { apiGet, apiPostWithAuth, apiPut, apiDelete, apiUploadProfilePhoto, getProfilePhotoUrl } from '../api/client'
 import { NEGOCIO_SINGULAR } from '../constants'
-import type { BusinessItem } from '../types/api'
+import type { BusinessItem, EmployeeItem } from '../types/api'
 
 const IconUser = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -77,6 +77,19 @@ export default function Configuracoes() {
   const [slugSavingId, setSlugSavingId] = useState<string | null>(null)
   const [slugError, setSlugError] = useState('')
   const [slugSaved, setSlugSaved] = useState(false)
+
+  // Funcionários
+  const [employeeBusinessId, setEmployeeBusinessId] = useState<string>('')
+  const [employees, setEmployees] = useState<EmployeeItem[]>([])
+  const [employeesLoading, setEmployeesLoading] = useState(false)
+  const [newEmpName, setNewEmpName] = useState('')
+  const [newEmpRole, setNewEmpRole] = useState('')
+  const [empError, setEmpError] = useState('')
+  const [empSaving, setEmpSaving] = useState(false)
+  const [editingEmpId, setEditingEmpId] = useState<string | null>(null)
+  const [editEmpName, setEditEmpName] = useState('')
+  const [editEmpRole, setEditEmpRole] = useState('')
+  const [editEmpActive, setEditEmpActive] = useState(true)
 
   // Horários de funcionamento
   const [selectedBusinessId, setSelectedBusinessId] = useState<string>('')
@@ -206,6 +219,62 @@ export default function Configuracoes() {
       const err = result.error && ('mensagem' in result.error ? result.error.mensagem : result.error.message)
       setSlugError(err ?? 'Erro ao salvar link.')
     }
+  }
+
+  useEffect(() => {
+    if (!token || !employeeBusinessId) { setEmployees([]); return }
+    setEmployeesLoading(true)
+    apiGet<EmployeeItem[]>(`/api/business/${employeeBusinessId}/employees`, token).then((res) => {
+      setEmployeesLoading(false)
+      if (res.ok) setEmployees(res.data)
+    })
+  }, [token, employeeBusinessId])
+
+  async function handleAddEmployee(e: React.FormEvent) {
+    e.preventDefault()
+    if (!token || !employeeBusinessId || !newEmpName.trim()) return
+    setEmpError('')
+    setEmpSaving(true)
+    const res = await apiPostWithAuth<{ name: string; role?: string }, EmployeeItem>(
+      `/api/business/${employeeBusinessId}/employees`,
+      { name: newEmpName.trim(), role: newEmpRole.trim() || undefined },
+      token
+    )
+    setEmpSaving(false)
+    if (res.ok) {
+      setEmployees((prev) => [...prev, res.data])
+      setNewEmpName('')
+      setNewEmpRole('')
+    } else {
+      const err = res.error && ('mensagem' in res.error ? res.error.mensagem : res.error.message)
+      setEmpError(err ?? 'Erro ao adicionar funcionário.')
+    }
+  }
+
+  async function handleSaveEmployee(id: string) {
+    if (!token || !employeeBusinessId) return
+    setEmpError('')
+    setEmpSaving(true)
+    const res = await apiPut<{ name: string; role?: string; isActive: boolean }, EmployeeItem>(
+      `/api/business/${employeeBusinessId}/employees/${id}`,
+      { name: editEmpName.trim(), role: editEmpRole.trim() || undefined, isActive: editEmpActive },
+      token
+    )
+    setEmpSaving(false)
+    if (res.ok) {
+      setEmployees((prev) => prev.map((e) => (e.id === id ? res.data : e)))
+      setEditingEmpId(null)
+    } else {
+      const err = res.error && ('mensagem' in res.error ? res.error.mensagem : res.error.message)
+      setEmpError(err ?? 'Erro ao salvar funcionário.')
+    }
+  }
+
+  async function handleDeleteEmployee(id: string) {
+    if (!token || !employeeBusinessId) return
+    if (!window.confirm('Remover funcionário?')) return
+    const res = await apiDelete(`/api/business/${employeeBusinessId}/employees/${id}`, token)
+    if (res.ok) setEmployees((prev) => prev.filter((e) => e.id !== id))
   }
 
   function getBookingLink(slug: string | null): string {
@@ -504,6 +573,118 @@ export default function Configuracoes() {
                 {hoursSaving ? 'Salvando...' : 'Salvar horários'}
               </button>
             </form>
+          )}
+        </section>
+      )}
+
+      {/* Funcionários */}
+      {businesses.length > 0 && (
+        <section className="mb-8 border-t border-gray-200 pt-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-1">Funcionários</h2>
+          <p className="text-gray-600 text-sm mb-4">
+            Cadastre os profissionais do negócio. Clientes poderão escolher o profissional ao agendar.
+            Se não houver funcionários cadastrados, os agendamentos ficam no modo de profissional único.
+          </p>
+          <div className="mb-4">
+            <label htmlFor="empBusiness" className="block text-sm font-medium text-gray-700 mb-1">{NEGOCIO_SINGULAR}</label>
+            <select
+              id="empBusiness"
+              value={employeeBusinessId}
+              onChange={(e) => { setEmployeeBusinessId(e.target.value); setEditingEmpId(null); setEmpError('') }}
+              className="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-primary focus:border-primary"
+            >
+              <option value="">Selecione a {NEGOCIO_SINGULAR}</option>
+              {businesses.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+
+          {employeeBusinessId && (
+            <>
+              {employeesLoading ? (
+                <p className="text-sm text-gray-500 mb-3">Carregando...</p>
+              ) : employees.length === 0 ? (
+                <p className="text-sm text-gray-500 mb-3">Nenhum funcionário cadastrado.</p>
+              ) : (
+                <ul className="space-y-2 mb-4">
+                  {employees.map((emp) => (
+                    <li key={emp.id} className="p-3 rounded-xl border border-gray-200 bg-gray-50">
+                      {editingEmpId === emp.id ? (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={editEmpName}
+                            onChange={(e) => setEditEmpName(e.target.value)}
+                            placeholder="Nome"
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          />
+                          <input
+                            type="text"
+                            value={editEmpRole}
+                            onChange={(e) => setEditEmpRole(e.target.value)}
+                            placeholder="Cargo / especialidade (opcional)"
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                          />
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input type="checkbox" checked={editEmpActive} onChange={(e) => setEditEmpActive(e.target.checked)} className="rounded border-gray-300 text-primary focus:ring-primary" />
+                            Ativo
+                          </label>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => handleSaveEmployee(emp.id)} disabled={empSaving} className="px-4 py-1.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-70">
+                              {empSaving ? 'Salvando...' : 'Salvar'}
+                            </button>
+                            <button type="button" onClick={() => setEditingEmpId(null)} className="px-4 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50">
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="font-medium text-gray-900 text-sm">{emp.name}</span>
+                            {emp.role && <span className="ml-2 text-xs text-gray-500">{emp.role}</span>}
+                            {!emp.isActive && <span className="ml-2 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Inativo</span>}
+                          </div>
+                          <div className="flex gap-2 shrink-0">
+                            <button type="button" onClick={() => { setEditingEmpId(emp.id); setEditEmpName(emp.name); setEditEmpRole(emp.role ?? ''); setEditEmpActive(emp.isActive) }} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
+                              Editar
+                            </button>
+                            <button type="button" onClick={() => handleDeleteEmployee(emp.id)} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">
+                              Remover
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <form onSubmit={handleAddEmployee} className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={newEmpName}
+                  onChange={(e) => setNewEmpName(e.target.value)}
+                  placeholder="Nome do funcionário"
+                  className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm text-gray-900 focus:ring-2 focus:ring-primary focus:border-primary"
+                  required
+                />
+                <input
+                  type="text"
+                  value={newEmpRole}
+                  onChange={(e) => setNewEmpRole(e.target.value)}
+                  placeholder="Cargo (opcional)"
+                  className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm text-gray-900 focus:ring-2 focus:ring-primary focus:border-primary"
+                />
+                <button
+                  type="submit"
+                  disabled={empSaving || !newEmpName.trim()}
+                  className="min-h-[44px] px-4 py-2 rounded-xl bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-70 whitespace-nowrap"
+                >
+                  {empSaving ? 'Adicionando...' : 'Adicionar'}
+                </button>
+              </form>
+              {empError && <p className="mt-2 text-sm text-red-600" role="alert">{empError}</p>}
+            </>
           )}
         </section>
       )}

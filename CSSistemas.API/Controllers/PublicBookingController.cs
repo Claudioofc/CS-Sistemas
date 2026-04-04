@@ -1,4 +1,5 @@
 using CSSistemas.Application.DTOs;
+using CSSistemas.Application.DTOs.Employee;
 using CSSistemas.Application.DTOs.PublicBooking;
 using CSSistemas.Application.Exceptions;
 using CSSistemas.Application.Helpers;
@@ -22,6 +23,7 @@ public class PublicBookingController : ControllerBase
     private readonly IAppointmentRepository _appointmentRepo;
     private readonly INotificationRepository _notificationRepo;
     private readonly IAvailabilityService _availabilityService;
+    private readonly IEmployeeRepository _employeeRepo;
     private readonly IEmailSender _emailSender;
     private readonly IWhatsAppSender _whatsAppSender;
     private readonly IConfiguration _config;
@@ -34,6 +36,7 @@ public class PublicBookingController : ControllerBase
         IAppointmentRepository appointmentRepo,
         INotificationRepository notificationRepo,
         IAvailabilityService availabilityService,
+        IEmployeeRepository employeeRepo,
         IEmailSender emailSender,
         IWhatsAppSender whatsAppSender,
         IConfiguration config,
@@ -45,6 +48,7 @@ public class PublicBookingController : ControllerBase
         _appointmentRepo = appointmentRepo;
         _notificationRepo = notificationRepo;
         _availabilityService = availabilityService;
+        _employeeRepo = employeeRepo;
         _emailSender = emailSender;
         _whatsAppSender = whatsAppSender;
         _config = config;
@@ -76,16 +80,28 @@ public class PublicBookingController : ControllerBase
         return Ok(services.Select(s => new PublicServiceDto(s.Id, s.Name, s.DurationMinutes, s.Price)));
     }
 
-    /// <summary>Horários do dia com indicação disponível/ocupado. date = yyyy-MM-dd (dia no fuso Brasil). Ocupados podem ser exibidos em vermelho na UI.</summary>
+    /// <summary>Lista funcionários ativos do negócio (público, para exibir opções de escolha no agendamento).</summary>
+    [HttpGet("{slug}/employees")]
+    [ProducesResponseType(typeof(IReadOnlyList<EmployeeResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetEmployees(string slug, CancellationToken cancellationToken = default)
+    {
+        var business = await _businessRepo.GetByPublicSlugAsync(slug, cancellationToken);
+        if (business == null) throw CommException.NotFound("Link de agendamento não encontrado.");
+        var employees = await _employeeRepo.GetByBusinessIdAsync(business.Id, onlyActive: true, cancellationToken);
+        return Ok(employees.Select(e => new EmployeeResponse(e.Id, e.Name, e.Role, e.IsActive)));
+    }
+
+    /// <summary>Horários do dia com indicação disponível/ocupado. date = yyyy-MM-dd (dia no fuso Brasil). employeeId filtra por funcionário específico.</summary>
     [HttpGet("{slug}/slots")]
     [ProducesResponseType(typeof(IReadOnlyList<SlotWithAvailabilityDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetSlots(string slug, [FromQuery] Guid serviceId, [FromQuery] DateTime date, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetSlots(string slug, [FromQuery] Guid serviceId, [FromQuery] DateTime date, [FromQuery] Guid? employeeId = null, CancellationToken cancellationToken = default)
     {
         var business = await _businessRepo.GetByPublicSlugAsync(slug, cancellationToken);
         if (business == null) throw CommException.NotFound("Link de agendamento não encontrado.");
         var dateOnly = date.Date;
-        var slots = await _availabilityService.GetSlotsWithAvailabilityAsync(business.Id, serviceId, dateOnly, 30, cancellationToken);
+        var slots = await _availabilityService.GetSlotsWithAvailabilityAsync(business.Id, serviceId, dateOnly, 30, employeeId, cancellationToken);
         return Ok(slots);
     }
 
@@ -108,14 +124,32 @@ public class PublicBookingController : ControllerBase
         if (service == null) throw CommException.NotFound("Serviço não encontrado.");
         if (!service.IsActive) throw CommException.BadRequest("Serviço não está disponível.");
 
+        // Valida funcionário, se informado
+        Employee? employee = null;
+        if (request.EmployeeId.HasValue && request.EmployeeId.Value != Guid.Empty)
+        {
+            employee = await _employeeRepo.GetByIdAndBusinessIdAsync(request.EmployeeId.Value, business.Id, cancellationToken);
+            if (employee == null || !employee.IsActive)
+                throw CommException.BadRequest("Funcionário não encontrado ou inativo.");
+        }
+
         // Sempre gravar em UTC. Se o cliente enviar sem "Z" (Unspecified), tratar como horário de Brasília e converter para UTC (evita 14:30 Brasil ser salvo como 14:30 UTC).
         var scheduledAt = ToUtcFromRequest(request.ScheduledAt);
-        var hasConflict = await _appointmentRepo.HasConflictAsync(business.Id, scheduledAt, service.DurationMinutes, null, cancellationToken);
+
+        int? capacity = null;
+        if (employee == null)
+        {
+            var activeCount = await _employeeRepo.CountActiveByBusinessIdAsync(business.Id, cancellationToken);
+            if (activeCount > 0) capacity = activeCount;
+        }
+
+        var hasConflict = await _appointmentRepo.HasConflictAsync(business.Id, scheduledAt, service.DurationMinutes, null, employee?.Id, capacity, cancellationToken);
         if (hasConflict) throw CommException.Conflict("Este horário não está mais disponível. Escolha outro.");
 
         var appointment = Appointment.Create(
             business.Id, request.ServiceId, request.ClientName, scheduledAt,
-            request.ClientPhone, request.ClientEmail, request.Notes);
+            request.ClientPhone, request.ClientEmail, request.Notes,
+            employee?.Id, employee?.Name);
         appointment.SetStatus(AppointmentStatus.Confirmed); // Cliente final agendou = confirmado em Agendamentos
         appointment.SetCancelToken(Guid.NewGuid().ToString("N"));
         await _appointmentRepo.AddAsync(appointment, cancellationToken);

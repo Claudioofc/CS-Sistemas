@@ -14,7 +14,11 @@ public interface IAppointmentRepository
     Task<(IReadOnlyList<Appointment> Items, int TotalCount)> GetByBusinessIdPagedAsync(Guid businessId, DateTime? from, DateTime? to, string? search, int page, int pageSize, CancellationToken cancellationToken = default);
     /// <summary>Agendamentos do negócio no período, com Service (para cálculo de ganhos).</summary>
     Task<IReadOnlyList<Appointment>> GetByBusinessIdWithServiceAsync(Guid businessId, DateTime from, DateTime to, CancellationToken cancellationToken = default);
-    Task<bool> HasConflictAsync(Guid businessId, DateTime scheduledAt, int durationMinutes, Guid? excludeAppointmentId = null, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Verifica conflito de horário. Se employeeId informado, verifica apenas os agendamentos desse funcionário.
+    /// Se businessCapacity informado (número de funcionários ativos), considera capacidade múltipla.
+    /// </summary>
+    Task<bool> HasConflictAsync(Guid businessId, DateTime scheduledAt, int durationMinutes, Guid? excludeAppointmentId = null, Guid? employeeId = null, int? businessCapacity = null, CancellationToken cancellationToken = default);
     Task AddAsync(Appointment appointment, CancellationToken cancellationToken = default);
     Task UpdateAsync(Appointment appointment, CancellationToken cancellationToken = default);
     /// <summary>Soft delete: marca como excluído (não remove do banco).</summary>

@@ -88,30 +88,33 @@ public class AppointmentRepository : IAppointmentRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<bool> HasConflictAsync(Guid businessId, DateTime scheduledAt, int durationMinutes, Guid? excludeAppointmentId = null, CancellationToken cancellationToken = default)
+    public async Task<bool> HasConflictAsync(Guid businessId, DateTime scheduledAt, int durationMinutes, Guid? excludeAppointmentId = null, Guid? employeeId = null, int? businessCapacity = null, CancellationToken cancellationToken = default)
     {
         var start = scheduledAt.Kind == DateTimeKind.Utc ? scheduledAt : DateTime.SpecifyKind(scheduledAt, DateTimeKind.Utc);
         var end = start.AddMinutes(durationMinutes);
 
-        // Overlap: existing_start < new_end AND existing_end > new_start
-        // Carrega candidatos com ScheduledAt < new_end e filtra o fim real em memória (requer Service.DurationMinutes).
         var candidates = await _context.Appointments
             .AsNoTracking()
             .Include(a => a.Service)
             .Where(a => a.BusinessId == businessId && a.Status != AppointmentStatus.Cancelled)
-            .Where(a => a.ScheduledAt < end) // appointment start before new end
+            .Where(a => a.ScheduledAt < end)
             .ToListAsync(cancellationToken);
 
         if (excludeAppointmentId.HasValue)
             candidates = candidates.Where(a => a.Id != excludeAppointmentId.Value).ToList();
 
-        foreach (var a in candidates)
+        // Filtra apenas os que realmente se sobrepõem (existingEnd > start)
+        var overlapping = candidates.Where(a => a.ScheduledAt.AddMinutes(a.Service.DurationMinutes) > start).ToList();
+
+        if (employeeId.HasValue)
         {
-            var existingEnd = a.ScheduledAt.AddMinutes(a.Service.DurationMinutes);
-            if (existingEnd > start)
-                return true;
+            // Verifica conflito apenas para este funcionário
+            return overlapping.Any(a => a.EmployeeId == employeeId.Value);
         }
-        return false;
+
+        // Sem funcionário específico: usa capacidade do negócio
+        var capacity = businessCapacity ?? 1;
+        return overlapping.Count >= capacity;
     }
 
     public async Task AddAsync(Appointment appointment, CancellationToken cancellationToken = default)

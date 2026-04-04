@@ -7,4 +7,5 @@ public record CreatePublicAppointmentRequest(
     DateTime ScheduledAt,
     string? ClientPhone = null,
     string? ClientEmail = null,
-    string? Notes = null);
+    string? Notes = null,
+    Guid? EmployeeId = null);
