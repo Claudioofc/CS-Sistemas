@@ -30,6 +30,16 @@ public static class AuthenticationServiceExtensions
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
+                // Lê o JWT do cookie HttpOnly quando não há header Authorization (fallback seguro)
+                options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+                {
+                    OnMessageReceived = ctx =>
+                    {
+                        if (ctx.Token == null && ctx.Request.Cookies.TryGetValue("cssistemas_auth", out var cookieToken))
+                            ctx.Token = cookieToken;
+                        return Task.CompletedTask;
+                    }
+                };
             });
         return services;
     }

@@ -1,4 +1,5 @@
 using CSSistemas.API.Extensions;
+using CSSistemas.Application.Configuration;
 using CSSistemas.Application.DTOs;
 using CSSistemas.Application.DTOs.Auth;
 using CSSistemas.Application.Exceptions;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace CSSistemas.API.Controllers;
 
@@ -36,6 +38,8 @@ public class AuthController : ControllerBase
         return false;
     }
 
+    private const string AuthCookieName = "cssistemas_auth";
+
     private readonly IAuthService _authService;
     private readonly IUserRepository _userRepository;
     private readonly IValidator<LoginRequest> _loginValidator;
@@ -45,6 +49,7 @@ public class AuthController : ControllerBase
     private readonly IValidator<ProfileUpdateRequest> _profileValidator;
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<AuthController> _logger;
+    private readonly IConfiguration _configuration;
 
     public AuthController(
         IAuthService authService,
@@ -55,7 +60,8 @@ public class AuthController : ControllerBase
         IValidator<ResetPasswordRequest> resetPasswordValidator,
         IValidator<ProfileUpdateRequest> profileValidator,
         IWebHostEnvironment env,
-        ILogger<AuthController> logger)
+        ILogger<AuthController> logger,
+        IConfiguration configuration)
     {
         _authService = authService;
         _userRepository = userRepository;
@@ -66,7 +72,28 @@ public class AuthController : ControllerBase
         _profileValidator = profileValidator;
         _env = env;
         _logger = logger;
+        _configuration = configuration;
     }
+
+    private void SetAuthCookie(string token)
+    {
+        var jwtSettings = _configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>();
+        var expiry = jwtSettings?.ExpiresMinutes > 0
+            ? DateTimeOffset.UtcNow.AddMinutes(jwtSettings.ExpiresMinutes)
+            : DateTimeOffset.UtcNow.AddHours(8);
+
+        Response.Cookies.Append(AuthCookieName, token, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !_env.IsDevelopment(),
+            SameSite = SameSiteMode.Strict,
+            Expires = expiry,
+            Path = "/"
+        });
+    }
+
+    private void ClearAuthCookie() =>
+        Response.Cookies.Delete(AuthCookieName, new CookieOptions { Path = "/" });
 
     /// <summary>Login — retorna JWT para web e mobile.</summary>
     [HttpPost("login")]
@@ -81,9 +108,13 @@ public class AuthController : ControllerBase
             return BadRequest(validation.ToValidationErrorResponse());
 
         var result = await _authService.LoginAsync(request, cancellationToken);
+        if (result is LoginSuccessResult success)
+        {
+            SetAuthCookie(success.Response.Token);
+            return Ok(success.Response);
+        }
         return result switch
         {
-            LoginSuccessResult success => Ok(success.Response),
             LoginFailureResult fail => Unauthorized(new { message = "Email ou senha inválidos.", attemptsRemaining = fail.AttemptsRemaining }),
             LoginLockedResult _ => Unauthorized(new { message = "Conta bloqueada. Use 'Esqueci minha senha' para redefinir sua senha por e-mail.", locked = true }),
             _ => Unauthorized(new { message = "Email ou senha inválidos.", attemptsRemaining = 3 })
@@ -129,6 +160,7 @@ public class AuthController : ControllerBase
         if (response == null)
             return Unauthorized(new { message = "Código inválido ou expirado." });
 
+        SetAuthCookie(response.Token);
         return Ok(response);
     }
 
@@ -284,6 +316,14 @@ public class AuthController : ControllerBase
         return Ok(new CurrentUserResponse(user.Id, user.Email, user.Name, user.ProfilePhotoUrl, user.DocumentType, user.DocumentNumber, user.IsAdmin, user.ShowWelcomeBanner));
     }
 
+    /// <summary>Logout — remove o cookie de autenticação.</summary>
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public IActionResult Logout()
+    {
+        ClearAuthCookie();
+        return NoContent();
+    }
 }
 
 public record EmailVerifyRequest(string Email, string Code);

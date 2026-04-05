@@ -22,6 +22,7 @@ public class SubscriptionRequiredMiddleware
         ("/api/subscription/status", "GET"),
         ("/api/plans", "GET"),
         ("/api/auth/verify-email", "POST"),
+        ("/api/auth/logout", "POST"),
         ("/api/survey/eligibility", "GET"),
         ("/api/survey", "POST"),
         ("/api/survey/dismiss", "POST")

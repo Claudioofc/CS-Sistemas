@@ -46,13 +46,13 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY))
+  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem(TOKEN_KEY))
   const [user, setUser] = useState<User | null>(null)
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchSubscriptionStatus = useCallback(async () => {
-    const t = localStorage.getItem(TOKEN_KEY)
+    const t = sessionStorage.getItem(TOKEN_KEY)
     if (!t) {
       setSubscriptionStatus(null)
       return
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const fetchUser = useCallback(async () => {
-    const t = localStorage.getItem(TOKEN_KEY)
+    const t = sessionStorage.getItem(TOKEN_KEY)
     if (!t) {
       setUser(null)
       setIsLoading(false)
@@ -95,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(null)
       setUser(null)
       setSubscriptionStatus(null)
-      localStorage.removeItem(TOKEN_KEY)
+      sessionStorage.removeItem(TOKEN_KEY)
     }
     setIsLoading(false)
   }, [])
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         locked: err.locked,
       }
     }
-    localStorage.setItem(TOKEN_KEY, res.data.token)
+    sessionStorage.setItem(TOKEN_KEY, res.data.token)
     setToken(res.data.token)
     setUser({
       id: '',
@@ -167,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const updateProfile = useCallback(async (payload: { name: string; profilePhotoUrl?: string | null; documentType?: DocumentType | null; documentNumber?: string | null }) => {
-    const t = localStorage.getItem(TOKEN_KEY)
+    const t = sessionStorage.getItem(TOKEN_KEY)
     if (!t) return { ok: false, message: 'Não autenticado.' }
     type ProfileResponse = { id: string; email: string; name: string; profilePhotoUrl: string | null; documentType: number | null; documentNumber: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean; emailVerified?: boolean }
     const res = await apiPatch<typeof payload, ProfileResponse>(
@@ -195,7 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const dismissWelcomeBanner = useCallback(async () => {
-    const t = localStorage.getItem(TOKEN_KEY)
+    const t = sessionStorage.getItem(TOKEN_KEY)
     if (!t || !user) return
     const res = await apiPostWithAuth<Record<string, never>, unknown>('/api/auth/welcome-banner-dismissed', {}, t)
     if (res.ok && user) {
@@ -212,7 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const err = res.error as { message?: string; mensagem?: string }
       return { ok: false, message: err.message ?? err.mensagem ?? 'Código inválido ou expirado.' }
     }
-    localStorage.setItem(TOKEN_KEY, res.data.token)
+    sessionStorage.setItem(TOKEN_KEY, res.data.token)
     setToken(res.data.token)
     setUser({
       id: '',
@@ -230,10 +230,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchUser])
 
   const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem(TOKEN_KEY)
     setToken(null)
     setUser(null)
     setSubscriptionStatus(null)
+    // Limpa o cookie HttpOnly no servidor (fire-and-forget)
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined)
   }, [])
 
   return (
