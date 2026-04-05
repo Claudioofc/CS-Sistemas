@@ -21,7 +21,10 @@ public class SubscriptionRequiredMiddleware
         ("/api/auth/welcome-banner-dismissed", "POST"),
         ("/api/subscription/status", "GET"),
         ("/api/plans", "GET"),
-        ("/api/auth/verify-email", "POST")
+        ("/api/auth/verify-email", "POST"),
+        ("/api/survey/eligibility", "GET"),
+        ("/api/survey", "POST"),
+        ("/api/survey/dismiss", "POST")
     };
 
     private readonly RequestDelegate _next;

@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.AddHostedService<AppointmentReminderService>();
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
         services.AddScoped<IEmployeeServicePriceRepository, EmployeeServicePriceRepository>();
+        services.AddScoped<ISurveyRepository, SurveyRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBusinessRepository, BusinessRepository>();
         services.AddScoped<IServiceRepository, ServiceRepository>();

@@ -31,6 +31,8 @@ public class User : EntityBase
     public DateTime? TwoFactorCodeExpiresAt { get; protected set; }
     /// <summary>True quando o e-mail do usuário foi verificado via OTP no cadastro.</summary>
     public bool EmailVerified { get; protected set; }
+    /// <summary>Quantas vezes o usuário dispensou o modal de pesquisa de satisfação.</summary>
+    public int SurveyDismissals { get; protected set; }
 
     protected User() { }
 
@@ -149,6 +151,13 @@ public class User : EntityBase
     {
         TwoFactorCode = null;
         TwoFactorCodeExpiresAt = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Incrementa o contador de dismissals da pesquisa de satisfação.</summary>
+    public void IncrementSurveyDismissals()
+    {
+        SurveyDismissals++;
         UpdatedAt = DateTime.UtcNow;
     }
 

@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<EmployeeServicePrice> EmployeeServicePrices => Set<EmployeeServicePrice>();
+    public DbSet<SurveyResponse> SurveyResponses => Set<SurveyResponse>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -43,6 +44,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.TwoFactorCode).HasMaxLength(6);
             entity.Property(e => e.TwoFactorCodeExpiresAt);
             entity.Property(e => e.EmailVerified);
+            entity.Property(e => e.SurveyDismissals);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasIndex(e => e.Email).IsUnique().HasFilter("\"IsDeleted\" = false");
             entity.HasIndex(e => new { e.DocumentType, e.DocumentNumber }).IsUnique().HasFilter("\"DocumentNumber\" IS NOT NULL AND \"IsDeleted\" = false");
@@ -162,6 +164,15 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ReadAt);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SurveyResponse>(entity =>
+        {
+            entity.ToTable("SurveyResponses");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Score).IsRequired();
+            entity.Property(e => e.Comment);
+            entity.Property(e => e.CreatedAt);
         });
     }
 }

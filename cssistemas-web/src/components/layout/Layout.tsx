@@ -6,6 +6,7 @@ import { apiGet, apiPatch, getProfilePhotoUrl } from '../../api/client'
 import { APP_NAME, ROUTES, FALLBACK_USER_NAME } from '../../constants'
 import { getFirstName, formatDateAndTime } from '../../utils/format'
 import { playNotificationBeep, warmupNotificationSound } from '../../utils/sound'
+import SurveyModal, { checkSurveyEligibility } from '../ui/SurveyModal'
 
 type NotificationItem = {
   id: string
@@ -56,6 +57,17 @@ export default function Layout() {
   const [supportSubmitting, setSupportSubmitting] = useState(false)
   const [supportError, setSupportError] = useState<string | null>(null)
   const [supportSuccess, setSupportSuccess] = useState(false)
+  const [showSurvey, setShowSurvey] = useState(false)
+
+  // Verifica elegibilidade do survey 5 segundos após carregar (não intromete no primeiro acesso)
+  useEffect(() => {
+    if (!token || !user || user.isAdmin) return
+    const timer = setTimeout(async () => {
+      const eligible = await checkSurveyEligibility(token)
+      if (eligible) setShowSurvey(true)
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [token, user?.id])
 
   const fetchNotifications = useCallback(async () => {
     if (!token) return
@@ -384,6 +396,11 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Modal de pesquisa de satisfação */}
+      {showSurvey && token && (
+        <SurveyModal token={token} onDone={() => setShowSurvey(false)} />
+      )}
 
       {/* Modal Boas-vindas / Como usar o sistema (apenas na primeira vez) */}
       {user?.showWelcomeBanner && (
