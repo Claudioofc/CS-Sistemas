@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<EmployeeServicePrice> EmployeeServicePrices => Set<EmployeeServicePrice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -39,6 +40,9 @@ public class AppDbContext : DbContext
             entity.Property(e => e.LockoutEnd);
             entity.Property(e => e.WelcomeBannerSeenAt);
             entity.Ignore(e => e.ShowWelcomeBanner);
+            entity.Property(e => e.TwoFactorCode).HasMaxLength(6);
+            entity.Property(e => e.TwoFactorCodeExpiresAt);
+            entity.Property(e => e.EmailVerified);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasIndex(e => e.Email).IsUnique().HasFilter("\"IsDeleted\" = false");
             entity.HasIndex(e => new { e.DocumentType, e.DocumentNumber }).IsUnique().HasFilter("\"DocumentNumber\" IS NOT NULL AND \"IsDeleted\" = false");
@@ -50,6 +54,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
             entity.Property(e => e.PublicSlug).HasMaxLength(100);
+            entity.Property(e => e.LogoUrl).HasMaxLength(500);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasIndex(e => e.PublicSlug).IsUnique().HasFilter("\"PublicSlug\" IS NOT NULL AND \"IsDeleted\" = false");
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
@@ -89,6 +94,15 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Role).HasMaxLength(100);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasOne(e => e.Business).WithMany().HasForeignKey(e => e.BusinessId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<EmployeeServicePrice>(entity =>
+        {
+            entity.ToTable("EmployeeServicePrices");
+            entity.HasKey(e => new { e.EmployeeId, e.ServiceId });
+            entity.Property(e => e.Price).HasPrecision(18, 2);
+            entity.HasOne<Employee>().WithMany().HasForeignKey(e => e.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Service>().WithMany().HasForeignKey(e => e.ServiceId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Client>(entity =>

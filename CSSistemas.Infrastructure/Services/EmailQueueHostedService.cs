@@ -62,6 +62,9 @@ public sealed class EmailQueueHostedService : BackgroundService
                     case EmailWorkItemKind.AppointmentReminder:
                         await sender.SendAppointmentReminderAsync(item.ToEmail!, item.ClientName!, item.ScheduledAtFormatted!, item.ServiceName!, item.BusinessName!, item.CancelLink!, stoppingToken);
                         break;
+                    case EmailWorkItemKind.EmailVerification:
+                        await sender.SendEmailVerificationAsync(item.ToEmail!, item.TwoFactorUserName!, item.TwoFactorCode!, stoppingToken);
+                        break;
                 }
             }
             catch (Exception ex)

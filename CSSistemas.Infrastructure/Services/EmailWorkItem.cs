@@ -23,7 +23,9 @@ public sealed record EmailWorkItem(
     string? WelcomeUserName = null,
     string? ExpiryWarningPlanName = null,
     string? ExpiryWarningEndsAt = null,
-    int? ExpiryWarningDays = null);
+    int? ExpiryWarningDays = null,
+    string? TwoFactorUserName = null,
+    string? TwoFactorCode = null);
 
 public enum EmailWorkItemKind
 {
@@ -35,5 +37,6 @@ public enum EmailWorkItemKind
     NewUserWelcome,
     SupportRequest,
     SubscriptionExpiryWarning,
-    AppointmentReminder
+    AppointmentReminder,
+    EmailVerification
 }

@@ -73,7 +73,7 @@ public class AuthService : IAuthService
         return new LoginSuccessResult(new LoginResponse(jwt, user.Email, user.Name, expiresAt, user.ProfilePhotoUrl));
     }
 
-    public async Task<LoginResponse?> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
+    public async Task<RegisterPendingResult?> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(request.Name))
             return null;
@@ -92,11 +92,37 @@ public class AuthService : IAuthService
 
         var passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
         var user = User.Create(request.Email, passwordHash, request.Name, docType, docDigits);
+
+        // Gera OTP de verificação de e-mail antes de persistir
+        var otp = GenerateOtp();
+        user.SetTwoFactorCode(otp);
+
         await _userRepository.AddAsync(user, cancellationToken);
 
         var trial = Subscription.CreateTrial(user.Id);
         await _subscriptionRepository.AddAsync(trial, cancellationToken);
 
+        // Envia OTP de verificação por e-mail
+        await _emailSender.SendEmailVerificationAsync(user.Email, user.Name, otp, cancellationToken);
+
+        return new RegisterPendingResult(user.Email);
+    }
+
+    public async Task<LoginResponse?> VerifyEmailAsync(string email, string code, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(code))
+            return null;
+
+        var user = await _userRepository.GetByEmailForUpdateAsync(email.Trim().ToLowerInvariant(), cancellationToken);
+        if (user == null) return null;
+        if (user.TwoFactorCode == null || user.TwoFactorCodeExpiresAt == null) return null;
+        if (DateTime.UtcNow > user.TwoFactorCodeExpiresAt) return null;
+        if (user.TwoFactorCode != code.Trim()) return null;
+
+        user.SetEmailVerified();
+        await _userRepository.UpdateAsync(user, cancellationToken);
+
+        // Notifica admin e envia boas-vindas após verificação
         var adminIds = await _userRepository.GetAdminIdsAsync(cancellationToken);
         foreach (var adminId in adminIds)
         {
@@ -110,9 +136,9 @@ public class AuthService : IAuthService
 
         await _emailSender.SendWelcomeToNewUserAsync(user.Email, user.Name, cancellationToken);
 
-        var token = GenerateToken(user.Id, user.Email, user.Name, user.IsAdmin);
+        var jwt = GenerateToken(user.Id, user.Email, user.Name, user.IsAdmin);
         var expiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiresMinutes);
-        return new LoginResponse(token, user.Email, user.Name, expiresAt, user.ProfilePhotoUrl);
+        return new LoginResponse(jwt, user.Email, user.Name, expiresAt, user.ProfilePhotoUrl);
     }
 
     private string GenerateToken(Guid userId, string email, string name, bool isAdmin = false)
@@ -169,8 +195,16 @@ public class AuthService : IAuthService
         var hash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.SetPassword(hash);
         user.ClearPasswordReset();
-        user.ResetFailedLogins(); // Desbloqueia a conta após redefinir senha
+        user.ResetFailedLogins();
         await _userRepository.UpdateAsync(user, cancellationToken);
         return true;
+    }
+
+    private static string GenerateOtp()
+    {
+        var bytes = new byte[4];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
+        var number = Math.Abs(BitConverter.ToInt32(bytes, 0)) % 1_000_000;
+        return number.ToString("D6");
     }
 }

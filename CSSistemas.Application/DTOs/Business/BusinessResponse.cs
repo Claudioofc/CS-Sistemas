@@ -8,5 +8,6 @@ public record BusinessResponse(
     string Name,
     BusinessType BusinessType,
     string? PublicSlug,
+    string? LogoUrl,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { apiGet, apiPostWithAuth, apiPut, apiDelete } from '../api/client'
 import { NEGOCIO_SINGULAR } from '../constants'
 import InputWithIcon from '../components/ui/InputWithIcon'
-import type { BusinessItem } from '../types/api'
+import type { BusinessItem, EmployeeItem } from '../types/api'
 
 type ServiceItem = {
   id: string
@@ -39,6 +39,7 @@ export default function Servicos() {
   const [businesses, setBusinesses] = useState<BusinessItem[]>([])
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null)
   const [services, setServices] = useState<ServiceItem[]>([])
+  const [employees, setEmployees] = useState<EmployeeItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -49,9 +50,18 @@ export default function Servicos() {
   const [formDurationHours, setFormDurationHours] = useState(0)
   const [formDurationMinutes, setFormDurationMinutes] = useState(30)
   const [formPrice, setFormPrice] = useState('')
+  // Preços por funcionário: employeeId → valor digitado (vazio = sem preço personalizado)
+  const [empPrices, setEmpPrices] = useState<Record<string, string>>({})
   const [formSaving, setFormSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+
+  // Form: novo funcionário
+  const [empFormOpen, setEmpFormOpen] = useState(false)
+  const [newEmpName, setNewEmpName] = useState('')
+  const [newEmpRole, setNewEmpRole] = useState('')
+  const [empSaving, setEmpSaving] = useState(false)
+  const [empError, setEmpError] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -66,16 +76,19 @@ export default function Servicos() {
   useEffect(() => {
     if (!token || !selectedBusinessId) {
       setServices([])
+      setEmployees([])
       setLoading(false)
       return
     }
     setLoading(true)
-    apiGet<ServiceItem[]>(`/api/services/by-business/${selectedBusinessId}`, token).then((res) => {
+    Promise.all([
+      apiGet<ServiceItem[]>(`/api/services/by-business/${selectedBusinessId}`, token),
+      apiGet<EmployeeItem[]>(`/api/business/${selectedBusinessId}/employees`, token),
+    ]).then(([svcRes, empRes]) => {
       setLoading(false)
-      if (res.ok) {
-        setServices(res.data)
-        setError('')
-      } else setError('Não foi possível carregar os serviços.')
+      if (svcRes.ok) { setServices(svcRes.data); setError('') }
+      else setError('Não foi possível carregar os serviços.')
+      if (empRes.ok) setEmployees(empRes.data.filter(e => e.isActive))
     })
   }, [token, selectedBusinessId])
 
@@ -85,6 +98,7 @@ export default function Servicos() {
     setFormDurationHours(0)
     setFormDurationMinutes(30)
     setFormPrice('')
+    setEmpPrices({})
     setFormError('')
     setFormOpen(true)
   }
@@ -95,6 +109,13 @@ export default function Servicos() {
     setFormDurationHours(Math.floor(s.durationMinutes / 60))
     setFormDurationMinutes(s.durationMinutes % 60)
     setFormPrice(s.price != null ? String(s.price) : '')
+    // Preenche preços dos funcionários a partir dos dados já carregados
+    const prices: Record<string, string> = {}
+    employees.forEach(emp => {
+      const sp = emp.servicePrices?.find(p => p.serviceId === s.id)
+      if (sp != null) prices[emp.id] = sp.price.toFixed(2).replace('.', ',')
+    })
+    setEmpPrices(prices)
     setFormError('')
     setFormOpen(true)
   }
@@ -106,6 +127,7 @@ export default function Servicos() {
     setFormDurationHours(0)
     setFormDurationMinutes(30)
     setFormPrice('')
+    setEmpPrices({})
     setFormError('')
   }
 
@@ -114,10 +136,7 @@ export default function Servicos() {
     if (!token || !selectedBusinessId) return
     const name = formName.trim()
     const durationMinutes = formDurationHours * 60 + formDurationMinutes
-    if (durationMinutes < 1) {
-      setFormError('Duração deve ser de pelo menos 1 minuto.')
-      return
-    }
+    if (durationMinutes < 1) { setFormError('Duração deve ser de pelo menos 1 minuto.'); return }
     const priceStr = formPrice.replace(',', '.').trim()
     const price = priceStr === '' ? null : parseFloat(priceStr)
 
@@ -125,50 +144,99 @@ export default function Servicos() {
     setFormError('')
     const body = { businessId: selectedBusinessId, name, durationMinutes, price }
 
+    let savedId = editingId
+
     if (editingId) {
       const res = await apiPut<typeof body, ServiceItem>(
-        `/api/services/${editingId}?businessId=${selectedBusinessId}`,
-        body,
-        token
+        `/api/services/${editingId}?businessId=${selectedBusinessId}`, body, token
       )
-      setFormSaving(false)
-      if (res.ok) {
-        setServices((prev) => prev.map((s) => (s.id === editingId ? res.data : s)))
-        closeForm()
+      if (!res.ok) {
+        setFormSaving(false)
+        setFormError((res.error && ('mensagem' in res.error ? res.error.mensagem : res.error.message)) ?? 'Erro ao atualizar serviço.')
         return
       }
-      const err = res.error && ('mensagem' in res.error ? res.error.mensagem : res.error.message)
-      setFormError(err ?? 'Erro ao atualizar serviço.')
-      return
+      setServices(prev => prev.map(s => s.id === editingId ? res.data : s))
+    } else {
+      const res = await apiPostWithAuth<typeof body, ServiceItem>('/api/services', body, token)
+      if (!res.ok) {
+        setFormSaving(false)
+        setFormError((res.error && ('mensagem' in res.error ? res.error.mensagem : res.error.message)) ?? 'Erro ao cadastrar serviço.')
+        return
+      }
+      setServices(prev => [...prev, res.data])
+      savedId = res.data.id
     }
 
-    const res = await apiPostWithAuth<typeof body, ServiceItem>('/api/services', body, token)
-    setFormSaving(false)
-    if (res.ok) {
-      setServices((prev) => [...prev, res.data])
-      closeForm()
-      return
+    // Salva preços por funcionário
+    if (savedId && employees.length > 0) {
+      const employeePrices = Object.entries(empPrices)
+        .map(([employeeId, val]) => ({ employeeId, price: parseFloat(val.replace(',', '.')) }))
+        .filter(p => !isNaN(p.price) && p.price >= 0)
+      await apiPut<typeof employeePrices, unknown>(
+        `/api/services/${savedId}/employee-prices?businessId=${selectedBusinessId}`,
+        employeePrices,
+        token
+      )
+      // Atualiza employees localmente com os novos preços
+      setEmployees(prev => prev.map(emp => {
+        const newPrice = employeePrices.find(p => p.employeeId === emp.id)
+        const filtered = (emp.servicePrices ?? []).filter(sp => sp.serviceId !== savedId)
+        const updated = newPrice ? [...filtered, { serviceId: savedId!, price: newPrice.price }] : filtered
+        return { ...emp, servicePrices: updated }
+      }))
     }
-    const err = res.error && ('mensagem' in res.error ? res.error.mensagem : res.error.message)
-    setFormError(err ?? 'Erro ao cadastrar serviço.')
+
+    setFormSaving(false)
+    closeForm()
+  }
+
+  const openEmpForm = () => {
+    setNewEmpName('')
+    setNewEmpRole('')
+    setEmpError('')
+    setEmpFormOpen(true)
+  }
+
+  const closeEmpForm = () => {
+    setEmpFormOpen(false)
+    setNewEmpName('')
+    setNewEmpRole('')
+    setEmpError('')
+  }
+
+  async function handleAddEmployee(e: React.FormEvent) {
+    e.preventDefault()
+    if (!token || !selectedBusinessId || !newEmpName.trim()) return
+    setEmpSaving(true)
+    setEmpError('')
+    const res = await apiPostWithAuth<{ name: string; role?: string }, EmployeeItem>(
+      `/api/business/${selectedBusinessId}/employees`,
+      { name: newEmpName.trim(), role: newEmpRole.trim() || undefined },
+      token
+    )
+    setEmpSaving(false)
+    if (res.ok) {
+      setEmployees(prev => [...prev, res.data])
+      closeEmpForm()
+    } else {
+      const err = res.error && ('mensagem' in res.error ? res.error.mensagem : res.error.message)
+      setEmpError(err ?? 'Erro ao adicionar funcionário.')
+    }
   }
 
   async function handleDelete(id: string) {
     if (!token || !selectedBusinessId) return
     const res = await apiDelete(`/api/services/${id}?businessId=${selectedBusinessId}`, token)
-    if (res.ok) {
-      setServices((prev) => prev.filter((s) => s.id !== id))
-      setDeleteConfirmId(null)
-    }
+    if (res.ok) { setServices(prev => prev.filter(s => s.id !== id)); setDeleteConfirmId(null) }
   }
 
-  const selectedBusiness = businesses.find((b) => b.id === selectedBusinessId)
+  const selectedBusiness = businesses.find(b => b.id === selectedBusinessId)
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl">
       <h1 className="text-xl font-semibold text-gray-900 mb-2">Serviços</h1>
       <p className="text-gray-600 text-sm mb-6">
-        Cadastre os serviços oferecidos pela sua empresa.
+        Cadastre os serviços e defina o preço que cada funcionário cobra.
       </p>
 
       {businesses.length === 0 ? (
@@ -178,38 +246,79 @@ export default function Servicos() {
       ) : (
         <>
           <div className="mb-6">
-            <label htmlFor="businessSelect" className="block text-sm font-medium text-gray-700 mb-1">
-              Empresa
-            </label>
+            <label htmlFor="businessSelect" className="block text-sm font-medium text-gray-700 mb-1">Empresa</label>
             <select
               id="businessSelect"
               value={selectedBusinessId ?? ''}
-              onChange={(e) => setSelectedBusinessId(e.target.value || null)}
+              onChange={(e) => { setSelectedBusinessId(e.target.value || null); closeForm() }}
               className="w-full rounded-xl border border-gray-300 px-4 py-3 bg-white text-gray-900 focus:ring-2 focus:ring-primary focus:border-primary"
             >
-                {businesses.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
+              {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
 
           {error && <p className="mb-4 text-sm text-red-600" role="alert">{error}</p>}
 
-          {!formOpen ? (
-            <button
-              type="button"
-              onClick={openNewForm}
-              className="mb-6 min-h-[44px] px-4 py-2 rounded-xl bg-primary text-white font-medium hover:bg-primary/90"
-            >
-              Novo serviço
-            </button>
-          ) : (
+          {!formOpen && !empFormOpen && (
+            <div className="mb-6 flex flex-wrap gap-3">
+              <button type="button" onClick={openNewForm} className="min-h-[44px] px-4 py-2 rounded-xl bg-primary text-white font-medium hover:bg-primary/90">
+                Novo serviço
+              </button>
+              {employees.length > 0 && (
+                <button type="button" onClick={openEmpForm} className="min-h-[44px] px-4 py-2 rounded-xl bg-primary text-white font-medium hover:bg-primary/90">
+                  Novo funcionário
+                </button>
+              )}
+            </div>
+          )}
+
+          {empFormOpen && (
+            <form onSubmit={handleAddEmployee} className="mb-6 p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-4">
+              <h2 className="text-lg font-medium text-gray-900">Novo funcionário</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="empName" className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+                  <input
+                    id="empName"
+                    type="text"
+                    value={newEmpName}
+                    onChange={(e) => setNewEmpName(e.target.value)}
+                    placeholder="Nome do funcionário"
+                    disabled={empSaving}
+                    className="w-full px-4 py-3 min-h-[48px] text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="empRole" className="block text-sm font-medium text-gray-700 mb-1">Cargo / especialidade</label>
+                  <input
+                    id="empRole"
+                    type="text"
+                    value={newEmpRole}
+                    onChange={(e) => setNewEmpRole(e.target.value)}
+                    placeholder="Ex.: Barbeiro, Manicure..."
+                    disabled={empSaving}
+                    className="w-full px-4 py-3 min-h-[48px] text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition"
+                  />
+                </div>
+              </div>
+              {empError && <p className="text-sm text-red-600" role="alert">{empError}</p>}
+              <div className="flex gap-2">
+                <button type="submit" disabled={empSaving || !newEmpName.trim()} className="min-h-[44px] px-5 py-2 rounded-xl bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-70">
+                  {empSaving ? 'Salvando...' : 'Cadastrar'}
+                </button>
+                <button type="button" onClick={closeEmpForm} className="min-h-[44px] px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          )}
+
+          {formOpen && (
             <form onSubmit={handleSubmitService} className="mb-6 p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-4">
-              <h2 className="text-lg font-medium text-gray-900">
-                {editingId ? 'Editar serviço' : 'Novo serviço'}
-              </h2>
+              <h2 className="text-lg font-medium text-gray-900">{editingId ? 'Editar serviço' : 'Novo serviço'}</h2>
+
+              {/* Nome */}
               <div>
                 <label htmlFor="formName" className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
                 <input
@@ -217,76 +326,91 @@ export default function Servicos() {
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Serviços prestados pela sua empresa"
+                  placeholder="Ex.: Corte de cabelo, Manicure..."
                   disabled={formSaving}
-                  className="w-full px-4 py-3 min-h-[48px] text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition touch-manipulation"
+                  className="w-full px-4 py-3 min-h-[48px] text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition"
                 />
               </div>
+
+              {/* Duração */}
               <div>
                 <span className="block text-sm font-medium text-gray-700 mb-2">Duração *</span>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2">
-                    <label htmlFor="formDurationHours" className="text-sm text-gray-600 sr-only">Horas</label>
                     <input
-                      id="formDurationHours"
-                      type="number"
-                      min={0}
-                      max={23}
-                      value={formDurationHours}
+                      type="number" min={0} max={23} value={formDurationHours}
                       onChange={(e) => setFormDurationHours(Math.max(0, Math.min(23, parseInt(e.target.value, 10) || 0)))}
                       disabled={formSaving}
-                      className="w-16 px-3 py-3 text-center text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-16 px-3 py-3 text-center text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="text-gray-600 text-sm">h</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <label htmlFor="formDurationMinutes" className="text-sm text-gray-600 sr-only">Minutos</label>
                     <input
-                      id="formDurationMinutes"
-                      type="number"
-                      min={0}
-                      max={59}
-                      value={formDurationMinutes}
+                      type="number" min={0} max={59} value={formDurationMinutes}
                       onChange={(e) => setFormDurationMinutes(Math.max(0, Math.min(59, parseInt(e.target.value, 10) || 0)))}
                       disabled={formSaving}
-                      className="w-16 px-3 py-3 text-center text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className="w-16 px-3 py-3 text-center text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                     <span className="text-gray-600 text-sm">min</span>
                   </div>
                 </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  Total: {formDurationHours * 60 + formDurationMinutes} min
-                </p>
+                <p className="mt-1 text-xs text-gray-500">Total: {formDurationHours * 60 + formDurationMinutes} min</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="formPrice" className="block text-sm font-medium text-gray-700 mb-1">Preço (opcional)</label>
-                  <InputWithIcon
-                    id="formPrice"
-                    type="text"
-                    inputMode="decimal"
-                    icon={<IconCurrency />}
-                    value={formPrice}
-                    onChange={(e) => setFormPrice(e.target.value.replace(/[^\d,.]/g, ''))}
-                    placeholder="0,00"
-                    disabled={formSaving}
-                  />
-                </div>
-              </div>
-              {formError && <p className="text-sm text-red-600" role="alert">{formError}</p>}
-              <div className="flex gap-2">
-                <button
-                  type="submit"
+
+              {/* Preço padrão */}
+              <div className="max-w-xs">
+                <label htmlFor="formPrice" className="block text-sm font-medium text-gray-700 mb-1">Preço padrão <span className="font-normal text-gray-400">(opcional)</span></label>
+                <InputWithIcon
+                  id="formPrice"
+                  type="text"
+                  inputMode="decimal"
+                  icon={<IconCurrency />}
+                  value={formPrice}
+                  onChange={(e) => setFormPrice(e.target.value.replace(/[^\d,.]/g, ''))}
+                  placeholder="0,00"
                   disabled={formSaving}
-                  className="min-h-[44px] px-4 py-2 rounded-xl bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-70"
-                >
+                />
+              </div>
+
+              {/* Preços por funcionário */}
+              {employees.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">
+                    Preço por funcionário <span className="font-normal text-gray-400">(deixe vazio para usar o preço padrão)</span>
+                  </p>
+                  <div className="space-y-2">
+                    {employees.map(emp => (
+                      <div key={emp.id} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-2.5">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-gray-800">{emp.name}</span>
+                          {emp.role && <span className="ml-2 text-xs text-gray-400">{emp.role}</span>}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-sm text-gray-500">R$</span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={empPrices[emp.id] ?? ''}
+                            onChange={e => setEmpPrices(prev => ({ ...prev, [emp.id]: e.target.value.replace(/[^\d,.]/g, '') }))}
+                            placeholder="—"
+                            disabled={formSaving}
+                            className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm text-right focus:ring-1 focus:ring-primary focus:border-primary"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {formError && <p className="text-sm text-red-600" role="alert">{formError}</p>}
+
+              <div className="flex gap-2">
+                <button type="submit" disabled={formSaving} className="min-h-[44px] px-5 py-2 rounded-xl bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-70">
                   {formSaving ? 'Salvando...' : editingId ? 'Salvar' : 'Cadastrar'}
                 </button>
-                <button
-                  type="button"
-                  onClick={closeForm}
-                  className="min-h-[44px] px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50"
-                >
+                <button type="button" onClick={closeForm} className="min-h-[44px] px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50">
                   Cancelar
                 </button>
               </div>
@@ -297,59 +421,54 @@ export default function Servicos() {
             <p className="text-gray-500 text-sm">Carregando serviços...</p>
           ) : services.length === 0 ? (
             <p className="text-gray-500 text-sm">
-              Nenhum serviço cadastrado para {selectedBusiness?.name ?? ''}. Clique em &quot;Novo serviço&quot; para adicionar.
+              Nenhum serviço cadastrado para {selectedBusiness?.name ?? ''}. Clique em "Novo serviço" para adicionar.
             </p>
           ) : (
             <ul className="space-y-2">
-              {services.map((s) => (
-                <li
-                  key={s.id}
-                  className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 rounded-xl border border-gray-200 bg-gray-50"
-                >
-                  <div>
-                    <span className="font-medium text-gray-900">{s.name}</span>
-                    <span className="text-gray-500 text-sm ml-2">
-                      {formatDuration(s.durationMinutes)} · {formatPrice(s.price)}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openEditForm(s)}
-                      className="text-sm text-primary hover:underline"
-                    >
-                      Editar
-                    </button>
-                    {deleteConfirmId === s.id ? (
-                      <>
-                        <span className="text-sm text-gray-500">Excluir?</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(s.id)}
-                          className="text-sm text-red-600 hover:underline"
-                        >
-                          Sim
+              {services.map(s => {
+                // Funcionários com preço configurado para este serviço
+                const empWithPrice = employees
+                  .map(emp => ({ emp, sp: emp.servicePrices?.find(p => p.serviceId === s.id) }))
+                  .filter(x => x.sp != null) as { emp: EmployeeItem; sp: { serviceId: string; price: number } }[]
+
+                return (
+                  <li key={s.id} className="rounded-xl border border-gray-200 bg-gray-50">
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-gray-900">{s.name}</span>
+                        <span className="text-gray-500 text-sm ml-2">
+                          {formatDuration(s.durationMinutes)} · {formatPrice(s.price)}
+                        </span>
+                        {empWithPrice.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {empWithPrice.map(({ emp, sp }) => (
+                              <span key={emp.id} className="inline-flex items-center gap-1 text-xs bg-primary/8 text-primary px-2 py-0.5 rounded-full border border-primary/20">
+                                {emp.name} · {formatPrice(sp.price)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button type="button" onClick={() => openEditForm(s)} className="text-sm text-primary hover:underline">
+                          Editar
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmId(null)}
-                          className="text-sm text-gray-600 hover:underline"
-                        >
-                          Não
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirmId(s.id)}
-                        className="text-sm text-red-600 hover:underline"
-                      >
-                        Excluir
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
+                        {deleteConfirmId === s.id ? (
+                          <>
+                            <span className="text-sm text-gray-500">Excluir?</span>
+                            <button type="button" onClick={() => handleDelete(s.id)} className="text-sm text-red-600 hover:underline">Sim</button>
+                            <button type="button" onClick={() => setDeleteConfirmId(null)} className="text-sm text-gray-600 hover:underline">Não</button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => setDeleteConfirmId(s.id)} className="text-sm text-red-600 hover:underline">
+                            Excluir
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </>

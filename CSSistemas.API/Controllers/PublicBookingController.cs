@@ -29,6 +29,7 @@ public class PublicBookingController : ControllerBase
     private readonly IConfiguration _config;
     private readonly IValidator<CreatePublicAppointmentRequest> _validator;
     private readonly ILogger<PublicBookingController> _logger;
+    private readonly IEmployeeServicePriceRepository _employeePriceRepo;
 
     public PublicBookingController(
         IBusinessRepository businessRepo,
@@ -41,7 +42,8 @@ public class PublicBookingController : ControllerBase
         IWhatsAppSender whatsAppSender,
         IConfiguration config,
         IValidator<CreatePublicAppointmentRequest> validator,
-        ILogger<PublicBookingController> logger)
+        ILogger<PublicBookingController> logger,
+        IEmployeeServicePriceRepository employeePriceRepo)
     {
         _businessRepo = businessRepo;
         _serviceRepo = serviceRepo;
@@ -54,6 +56,7 @@ public class PublicBookingController : ControllerBase
         _config = config;
         _validator = validator;
         _logger = logger;
+        _employeePriceRepo = employeePriceRepo;
     }
 
     /// <summary>Obtém negócio pelo slug público (para exibir nome e serviços).</summary>
@@ -65,7 +68,7 @@ public class PublicBookingController : ControllerBase
         var business = await _businessRepo.GetByPublicSlugAsync(slug, cancellationToken);
         if (business == null) throw CommException.NotFound("Link de agendamento não encontrado.");
         if (string.IsNullOrEmpty(business.PublicSlug)) throw CommException.NotFound("Agendamento público não disponível para este negócio.");
-        return Ok(new PublicBusinessDto(business.Id, business.Name, business.PublicSlug));
+        return Ok(new PublicBusinessDto(business.Id, business.Name, business.PublicSlug, business.LogoUrl));
     }
 
     /// <summary>Lista serviços do negócio (público).</summary>
@@ -89,7 +92,9 @@ public class PublicBookingController : ControllerBase
         var business = await _businessRepo.GetByPublicSlugAsync(slug, cancellationToken);
         if (business == null) throw CommException.NotFound("Link de agendamento não encontrado.");
         var employees = await _employeeRepo.GetByBusinessIdAsync(business.Id, onlyActive: true, cancellationToken);
-        return Ok(employees.Select(e => new EmployeeResponse(e.Id, e.Name, e.Role, e.IsActive)));
+        var prices = await _employeePriceRepo.GetByEmployeeIdsAsync(employees.Select(e => e.Id), cancellationToken);
+        var lookup = prices.ToLookup(p => p.EmployeeId, p => new EmployeeServicePriceDto(p.ServiceId, p.Price));
+        return Ok(employees.Select(e => new EmployeeResponse(e.Id, e.Name, e.Role, e.IsActive, lookup[e.Id].ToList())));
     }
 
     /// <summary>Horários do dia com indicação disponível/ocupado. date = yyyy-MM-dd (dia no fuso Brasil). employeeId filtra por funcionário específico.</summary>

@@ -32,32 +32,75 @@ public static class DatabaseScriptRunner
         }
     }
 
-    /// <summary>Divide o script em comandos por ponto e vírgula (ignora ; dentro de strings simples).</summary>
+    /// <summary>Divide o script em comandos por ponto e vírgula (ignora ; dentro de strings simples e blocos $$...$$).</summary>
     private static IEnumerable<string> SplitStatements(string sql)
     {
         var list = new List<string>();
         var sb = new System.Text.StringBuilder();
         var inSingle = false;
+        string? dollarTag = null; // ex: "$$" ou "$tag$"
 
         for (var i = 0; i < sql.Length; i++)
         {
             var c = sql[i];
 
+            // Dentro de string simples
             if (inSingle)
             {
                 sb.Append(c);
-                if (c == '\'' && (i == 0 || sql[i - 1] != '\\'))
-                    inSingle = false;
+                if (c == '\'')
+                {
+                    // '' é aspas escapada no PostgreSQL
+                    if (i + 1 < sql.Length && sql[i + 1] == '\'')
+                    {
+                        sb.Append(sql[i + 1]);
+                        i++;
+                    }
+                    else
+                    {
+                        inSingle = false;
+                    }
+                }
                 continue;
             }
 
-            if (c == '\'' && (i == 0 || sql[i - 1] != '\\'))
+            // Dentro de dollar-quoted string (DO $$ ... END$$)
+            if (dollarTag != null)
+            {
+                sb.Append(c);
+                // Verifica se o final do StringBuilder forma o closing tag
+                if (sb.Length >= dollarTag.Length)
+                {
+                    var tail = sb.ToString(sb.Length - dollarTag.Length, dollarTag.Length);
+                    if (tail == dollarTag)
+                        dollarTag = null;
+                }
+                continue;
+            }
+
+            // Início de dollar-quoted string: $ seguido de tag opcional e outro $
+            if (c == '$')
+            {
+                var end = sql.IndexOf('$', i + 1);
+                if (end >= 0)
+                {
+                    var tag = sql.Substring(i, end - i + 1); // ex: "$tag$" ou "$$"
+                    sb.Append(tag);
+                    dollarTag = tag;
+                    i = end;
+                    continue;
+                }
+            }
+
+            // Início de string simples
+            if (c == '\'')
             {
                 inSingle = true;
                 sb.Append(c);
                 continue;
             }
 
+            // Separador de comando
             if (c == ';')
             {
                 var stmt = sb.ToString().Trim();

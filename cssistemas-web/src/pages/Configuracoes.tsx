@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import type { DocumentType } from '../contexts/AuthContext'
 import InputWithIcon from '../components/ui/InputWithIcon'
 import { formatDocument, filterDocumentInput, getDocumentPlaceholder, getDocumentMaxLength } from '../utils/document'
-import { apiGet, apiPostWithAuth, apiPut, apiDelete, apiUploadProfilePhoto, getProfilePhotoUrl } from '../api/client'
+import { apiGet, apiPostWithAuth, apiPut, apiDelete, apiUploadBusinessLogo } from '../api/client'
 import { NEGOCIO_SINGULAR } from '../constants'
 import type { BusinessItem, EmployeeItem } from '../types/api'
 
@@ -53,17 +53,12 @@ function getFieldError(campo: string, errors?: { campo: string; mensagem: string
 export default function Configuracoes() {
   const { user, updateProfile, token } = useAuth()
   const [name, setName] = useState('')
-  const [profilePhotoFile, setProfilePhotoFile] = useState<File | null>(null)
   const [documentType, setDocumentType] = useState<DocumentType | ''>('')
   const [documentNumber, setDocumentNumber] = useState('')
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<{ campo: string; mensagem: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null)
-  const [photoUploading, setPhotoUploading] = useState(false)
-  const [photoError, setPhotoError] = useState('')
 
   // Seção: Sua clínica (nicho odontológico)
   const [businesses, setBusinesses] = useState<BusinessItem[]>([])
@@ -71,6 +66,12 @@ export default function Configuracoes() {
   const [clinicLoading, setClinicLoading] = useState(false)
   const [clinicError, setClinicError] = useState('')
   const [clinicSaved, setClinicSaved] = useState(false)
+
+  // Logo por negócio
+  const [logoUploadingId, setLogoUploadingId] = useState<string | null>(null)
+  const [logoError, setLogoError] = useState('')
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const [logoUploadTargetId, setLogoUploadTargetId] = useState<string | null>(null)
 
   // Link de agendamento (slug por negócio)
   const [slugByBusinessId, setSlugByBusinessId] = useState<Record<string, string>>({})
@@ -90,6 +91,7 @@ export default function Configuracoes() {
   const [editEmpName, setEditEmpName] = useState('')
   const [editEmpRole, setEditEmpRole] = useState('')
   const [editEmpActive, setEditEmpActive] = useState(true)
+
 
   // Horários de funcionamento
   const [selectedBusinessId, setSelectedBusinessId] = useState<string>('')
@@ -221,6 +223,21 @@ export default function Configuracoes() {
     }
   }
 
+  async function handleLogoUpload(businessId: string, file: File) {
+    if (!token) return
+    setLogoError('')
+    setLogoUploadingId(businessId)
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await apiUploadBusinessLogo(businessId, formData, token)
+    setLogoUploadingId(null)
+    if (res.ok) {
+      setBusinesses(prev => prev.map(b => b.id === businessId ? { ...b, logoUrl: res.data.logoUrl } : b))
+    } else {
+      setLogoError(res.error.message ?? 'Erro ao enviar logo.')
+    }
+  }
+
   useEffect(() => {
     if (!token || !employeeBusinessId) { setEmployees([]); return }
     setEmployeesLoading(true)
@@ -290,16 +307,6 @@ export default function Configuracoes() {
   }
 
   useEffect(() => {
-    if (profilePhotoFile) {
-      const url = URL.createObjectURL(profilePhotoFile)
-      setPreviewPhotoUrl(url)
-      return () => URL.revokeObjectURL(url)
-    }
-    setPreviewPhotoUrl(user?.profilePhotoUrl ? (getProfilePhotoUrl(user.profilePhotoUrl) ?? user.profilePhotoUrl) : null)
-    return () => {}
-  }, [profilePhotoFile, user?.profilePhotoUrl])
-
-  useEffect(() => {
     if (user) {
       setName(user.name)
       const dt = user.documentType ?? ''
@@ -309,63 +316,16 @@ export default function Configuracoes() {
     }
   }, [user])
 
-  /** Upload de foto: um único lugar (DRY). Retorna a URL ou null em caso de erro. */
-  async function uploadProfilePhotoFile(file: File): Promise<string | null> {
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await apiUploadProfilePhoto(formData, token ?? null)
-    if (!res.ok) return null
-    return res.data.url
-  }
-
-  async function handleProfilePhotoChange(file: File | null) {
-    setProfilePhotoFile(file ?? null)
-    setPhotoError('')
-    if (!file) return
-    setPhotoUploading(true)
-    const photoUrl = await uploadProfilePhotoFile(file)
-    if (photoUrl == null) {
-      setPhotoError('Erro ao enviar imagem.')
-      setPhotoUploading(false)
-      return
-    }
-    const result = await updateProfile({
-      name: user?.name ?? '',
-      profilePhotoUrl: photoUrl,
-      documentType: user?.documentType ?? null,
-      documentNumber: user?.documentNumber ?? null,
-    })
-    if (result.ok) {
-      setProfilePhotoFile(null)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    } else {
-      setPhotoError(result.message ?? 'Erro ao salvar foto.')
-    }
-    setPhotoUploading(false)
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    setPhotoError('')
     setFieldErrors([])
     setSaved(false)
     setLoading(true)
-    let photoUrl: string | null = user?.profilePhotoUrl ?? null
-    if (profilePhotoFile) {
-      photoUrl = await uploadProfilePhotoFile(profilePhotoFile)
-      if (photoUrl == null) {
-        setError('Erro ao enviar imagem.')
-        setLoading(false)
-        return
-      }
-      setProfilePhotoFile(null)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
     const docNum = documentNumber.replace(/\D/g, '').trim()
     const result = await updateProfile({
       name,
-      profilePhotoUrl: photoUrl,
+      profilePhotoUrl: user?.profilePhotoUrl ?? null,
       documentType: documentType === '' ? null : documentType,
       documentNumber: docNum || null,
     })
@@ -400,13 +360,48 @@ export default function Configuracoes() {
           Cadastre sua empresa para usar o dashboard, agendamentos e serviços.
         </p>
         {businesses.length > 0 ? (
-          <ul className="space-y-2 mb-4">
-            {businesses.map((b) => (
-              <li key={b.id} className="flex items-center gap-2 px-4 py-3 bg-gray-50 rounded-lg border border-gray-200">
-                <span className="font-medium text-gray-900">{b.name}</span>
-              </li>
-            ))}
-          </ul>
+          <>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file && logoUploadTargetId) handleLogoUpload(logoUploadTargetId, file)
+                e.target.value = ''
+              }}
+            />
+            <ul className="space-y-3 mb-4">
+              {businesses.map((b) => (
+                <li key={b.id} className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <button
+                    type="button"
+                    title="Alterar logo"
+                    disabled={logoUploadingId === b.id}
+                    onClick={() => { setLogoUploadTargetId(b.id); logoInputRef.current?.click() }}
+                    className="relative flex-shrink-0 w-12 h-12 rounded-full border-2 border-dashed border-gray-300 bg-white hover:border-primary overflow-hidden focus:ring-2 focus:ring-primary transition disabled:opacity-60"
+                  >
+                    {b.logoUrl ? (
+                      <img src={b.logoUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="w-full h-full flex items-center justify-center text-gray-400 text-xs font-semibold">
+                        {b.name.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                    {logoUploadingId === b.id && (
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white text-[10px]">...</span>
+                    )}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium text-gray-900">{b.name}</span>
+                    <p className="text-xs text-gray-400">Clique na imagem para alterar a logo</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {logoError && <p className="mb-2 text-sm text-red-600" role="alert">{logoError}</p>}
+          </>
         ) : null}
         {businesses.length === 0 && (
           <>
@@ -582,8 +577,7 @@ export default function Configuracoes() {
         <section className="mb-8 border-t border-gray-200 pt-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Funcionários</h2>
           <p className="text-gray-600 text-sm mb-4">
-            Cadastre os profissionais do negócio. Clientes poderão escolher o profissional ao agendar.
-            Se não houver funcionários cadastrados, os agendamentos ficam no modo de profissional único.
+            Cadastre os profissionais da sua empresa. Os preços por serviço são configurados na página de Serviços.
           </p>
           <div className="mb-4">
             <label htmlFor="empBusiness" className="block text-sm font-medium text-gray-700 mb-1">{NEGOCIO_SINGULAR}</label>
@@ -605,52 +599,73 @@ export default function Configuracoes() {
               ) : employees.length === 0 ? (
                 <p className="text-sm text-gray-500 mb-3">Nenhum funcionário cadastrado.</p>
               ) : (
-                <ul className="space-y-2 mb-4">
+                <ul className="space-y-3 mb-4">
                   {employees.map((emp) => (
-                    <li key={emp.id} className="p-3 rounded-xl border border-gray-200 bg-gray-50">
+                    <li key={emp.id} className="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
                       {editingEmpId === emp.id ? (
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            value={editEmpName}
-                            onChange={(e) => setEditEmpName(e.target.value)}
-                            placeholder="Nome"
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                          />
-                          <input
-                            type="text"
-                            value={editEmpRole}
-                            onChange={(e) => setEditEmpRole(e.target.value)}
-                            placeholder="Cargo / especialidade (opcional)"
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                          />
+                        /* ── Formulário de edição ── */
+                        <div className="p-4 space-y-4">
+                          {/* Dados básicos */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Nome *</label>
+                              <input
+                                type="text"
+                                value={editEmpName}
+                                onChange={(e) => setEditEmpName(e.target.value)}
+                                placeholder="Nome do funcionário"
+                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-1">Cargo / especialidade</label>
+                              <input
+                                type="text"
+                                value={editEmpRole}
+                                onChange={(e) => setEditEmpRole(e.target.value)}
+                                placeholder="Ex.: Barbeiro, Manicure..."
+                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-1 focus:ring-primary focus:border-primary"
+                              />
+                            </div>
+                          </div>
                           <label className="flex items-center gap-2 text-sm text-gray-700">
                             <input type="checkbox" checked={editEmpActive} onChange={(e) => setEditEmpActive(e.target.checked)} className="rounded border-gray-300 text-primary focus:ring-primary" />
-                            Ativo
+                            Funcionário ativo
                           </label>
-                          <div className="flex gap-2">
-                            <button type="button" onClick={() => handleSaveEmployee(emp.id)} disabled={empSaving} className="px-4 py-1.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-70">
+
+                          <div className="flex gap-2 pt-1">
+                            <button type="button" onClick={() => handleSaveEmployee(emp.id)} disabled={empSaving} className="min-h-[36px] px-5 py-1.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-70">
                               {empSaving ? 'Salvando...' : 'Salvar'}
                             </button>
-                            <button type="button" onClick={() => setEditingEmpId(null)} className="px-4 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50">
+                            <button type="button" onClick={() => setEditingEmpId(null)} className="min-h-[36px] px-4 py-1.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50">
                               Cancelar
                             </button>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <span className="font-medium text-gray-900 text-sm">{emp.name}</span>
-                            {emp.role && <span className="ml-2 text-xs text-gray-500">{emp.role}</span>}
-                            {!emp.isActive && <span className="ml-2 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Inativo</span>}
-                          </div>
-                          <div className="flex gap-2 shrink-0">
-                            <button type="button" onClick={() => { setEditingEmpId(emp.id); setEditEmpName(emp.name); setEditEmpRole(emp.role ?? ''); setEditEmpActive(emp.isActive) }} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
-                              Editar
-                            </button>
-                            <button type="button" onClick={() => handleDeleteEmployee(emp.id)} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">
-                              Remover
-                            </button>
+                        /* ── Visualização ── */
+                        <div className="p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-gray-900 text-sm">{emp.name}</span>
+                                {emp.role && <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{emp.role}</span>}
+                                {!emp.isActive && <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Inativo</span>}
+                              </div>
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                              <button type="button" onClick={() => {
+                                setEditingEmpId(emp.id)
+                                setEditEmpName(emp.name)
+                                setEditEmpRole(emp.role ?? '')
+                                setEditEmpActive(emp.isActive)
+                              }} className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
+                                Editar
+                              </button>
+                              <button type="button" onClick={() => handleDeleteEmployee(emp.id)} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">
+                                Remover
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -689,6 +704,7 @@ export default function Configuracoes() {
         </section>
       )}
 
+
       <div className="border-t border-gray-200 pt-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-1">Perfil</h2>
         <p className="text-gray-600 text-sm mb-6">Atualize seu perfil. Nome e documento (CPF ou CNPJ) são obrigatórios; a validação é feita no servidor.</p>
@@ -709,50 +725,6 @@ export default function Configuracoes() {
             aria-invalid={!!nameErr}
           />
           {nameErr && <p className="mt-1 text-sm text-red-600" role="alert">{nameErr}</p>}
-        </div>
-
-        <div>
-          <label id="profilePhotoLabel" className="block text-sm font-medium text-gray-700 mb-2">Foto de perfil (opcional)</label>
-          <input
-            ref={fileInputRef}
-            id="profilePhotoFile"
-            type="file"
-            accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-            onChange={(e) => handleProfilePhotoChange(e.target.files?.[0] ?? null)}
-            disabled={loading || photoUploading}
-            className="sr-only"
-            aria-labelledby="profilePhotoLabel"
-            aria-label="Selecionar foto de perfil"
-          />
-          <div className="flex flex-col items-start gap-2">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading || photoUploading}
-              className="relative flex items-center justify-center w-20 h-20 rounded-full border-2 border-gray-300 border-dashed bg-gray-50 hover:bg-gray-100 focus:ring-2 focus:ring-primary focus:ring-offset-2 transition disabled:opacity-70 disabled:pointer-events-none overflow-hidden"
-              aria-label="Escolher foto de perfil"
-            >
-              {previewPhotoUrl ? (
-                <img src={previewPhotoUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-gray-400 [&>svg]:w-10 [&>svg]:h-10" aria-hidden><IconUser /></span>
-              )}
-              {photoUploading && (
-                <span className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full text-white text-xs font-medium">
-                  Salvando...
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loading || photoUploading}
-              className="text-sm text-primary hover:underline disabled:opacity-70"
-            >
-              {previewPhotoUrl ? 'Trocar foto' : 'Escolher foto'}
-            </button>
-          </div>
-          {photoError && <p className="mt-1 text-sm text-red-600" role="alert">{photoError}</p>}
         </div>
 
         <div className="border-t border-gray-200 pt-5">

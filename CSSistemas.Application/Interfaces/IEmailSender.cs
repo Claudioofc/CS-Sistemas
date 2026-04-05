@@ -29,4 +29,7 @@ public interface IEmailSender
 
     /// <summary>Lembrete de agendamento enviado X horas antes do horário.</summary>
     Task SendAppointmentReminderAsync(string toEmail, string clientName, string scheduledAtFormatted, string serviceName, string businessName, string cancelLink, CancellationToken cancellationToken = default);
+
+    /// <summary>Código OTP de verificação de e-mail enviado no cadastro.</summary>
+    Task SendEmailVerificationAsync(string toEmail, string userName, string code, CancellationToken cancellationToken = default);
 }

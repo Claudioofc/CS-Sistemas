@@ -90,6 +90,22 @@ export async function apiPost<TBody, TResponse>(
   }
 }
 
+/** Upload da logo de um negócio. */
+export async function apiUploadBusinessLogo(
+  businessId: string,
+  formData: FormData,
+  token: string | null
+): Promise<{ ok: true; data: { logoUrl?: string | null } } | { ok: false; status: number; error: { message?: string } }> {
+  const res = await fetch(buildUrl(`/api/business/${businessId}/logo`), {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  })
+  const data = await res.json().catch(() => ({})) as { logoUrl?: string | null; message?: string }
+  if (res.ok) return { ok: true, data: { logoUrl: data.logoUrl } }
+  return { ok: false, status: res.status, error: { message: data.message ?? 'Erro ao enviar logo.' } }
+}
+
 /** Upload de arquivo (multipart) com token. Retorna { ok, data } ou { ok: false, status, error }. */
 export async function apiUploadProfilePhoto(
   formData: FormData,

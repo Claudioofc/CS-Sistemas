@@ -25,6 +25,12 @@ public class User : EntityBase
     public DateTime? WelcomeBannerSeenAt { get; protected set; }
     /// <summary>True se o banner de boas-vindas ainda deve ser exibido (não visto).</summary>
     public bool ShowWelcomeBanner => WelcomeBannerSeenAt == null;
+    /// <summary>Código OTP de 6 dígitos para verificação de e-mail no cadastro. Null = não solicitado.</summary>
+    public string? TwoFactorCode { get; protected set; }
+    /// <summary>Validade do código OTP (UTC).</summary>
+    public DateTime? TwoFactorCodeExpiresAt { get; protected set; }
+    /// <summary>True quando o e-mail do usuário foi verificado via OTP no cadastro.</summary>
+    public bool EmailVerified { get; protected set; }
 
     protected User() { }
 
@@ -127,6 +133,31 @@ public class User : EntityBase
     public void MarkWelcomeBannerSeen()
     {
         WelcomeBannerSeenAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Salva o código OTP gerado para verificação em dois fatores (expira em 10 min).</summary>
+    public void SetTwoFactorCode(string code)
+    {
+        TwoFactorCode = code;
+        TwoFactorCodeExpiresAt = DateTime.UtcNow.AddMinutes(10);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Limpa o código OTP após uso ou expiração.</summary>
+    public void ClearTwoFactorCode()
+    {
+        TwoFactorCode = null;
+        TwoFactorCodeExpiresAt = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Marca e-mail como verificado após OTP correto no cadastro.</summary>
+    public void SetEmailVerified()
+    {
+        EmailVerified = true;
+        TwoFactorCode = null;
+        TwoFactorCodeExpiresAt = null;
         UpdatedAt = DateTime.UtcNow;
     }
 }

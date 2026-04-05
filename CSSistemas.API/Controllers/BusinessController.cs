@@ -7,6 +7,7 @@ using CSSistemas.Domain.Entities;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Hosting;
 
 namespace CSSistemas.API.Controllers;
 
@@ -19,17 +20,23 @@ public class BusinessController : ControllerBase
     private readonly IBusinessHoursRepository _hoursRepository;
     private readonly IValidator<BusinessRequest> _validator;
     private readonly IValidator<BusinessHoursBulkRequest> _hoursValidator;
+    private readonly IWebHostEnvironment _env;
+
+    private const int MaxLogoBytes = 5 * 1024 * 1024;
+    private static readonly string[] AllowedImageTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
     public BusinessController(
         IBusinessRepository repository,
         IBusinessHoursRepository hoursRepository,
         IValidator<BusinessRequest> validator,
-        IValidator<BusinessHoursBulkRequest> hoursValidator)
+        IValidator<BusinessHoursBulkRequest> hoursValidator,
+        IWebHostEnvironment env)
     {
         _repository = repository;
         _hoursRepository = hoursRepository;
         _validator = validator;
         _hoursValidator = hoursValidator;
+        _env = env;
     }
 
     /// <summary>Lista negócios do usuário autenticado.</summary>
@@ -169,7 +176,44 @@ public class BusinessController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>Faz upload da logo do negócio.</summary>
+    [HttpPost("{id:guid}/logo")]
+    [ProducesResponseType(typeof(BusinessResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UploadLogo(Guid id, IFormFile? file, CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        if (userId == null) return Unauthorized();
+        var business = await _repository.GetByIdAndUserIdForUpdateAsync(id, userId.Value, cancellationToken);
+        if (business == null) throw CommException.NotFound("Negócio não encontrado.");
+        if (file == null || file.Length == 0)
+            throw CommException.BadRequest("Selecione uma imagem (JPEG, PNG ou WebP, até 5 MB).");
+        if (file.Length > MaxLogoBytes)
+            throw CommException.BadRequest("A imagem deve ter no máximo 5 MB.");
+        var contentType = file.ContentType?.ToLowerInvariant() ?? "";
+        if (!AllowedImageTypes.Contains(contentType))
+            throw CommException.BadRequest("Formato não permitido. Use JPEG, PNG ou WebP.");
+        var ext = contentType switch
+        {
+            "image/png" => ".png",
+            "image/webp" => ".webp",
+            _ => ".jpg"
+        };
+        var webRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+        var uploadDir = Path.Combine(webRoot, "uploads", "logos");
+        Directory.CreateDirectory(uploadDir);
+        var fileName = $"{id:N}{Guid.NewGuid():N}{ext}";
+        var fullPath = Path.Combine(uploadDir, fileName);
+        await using (var stream = new FileStream(fullPath, FileMode.Create))
+            await file.CopyToAsync(stream, cancellationToken);
+        var url = $"/uploads/logos/{fileName}";
+        business.UpdateLogo(url);
+        await _repository.UpdateAsync(business, cancellationToken);
+        return Ok(ToResponse(business));
+    }
+
     private static BusinessResponse ToResponse(Business b) => new(
-        b.Id, b.UserId, b.Name, b.BusinessType, b.PublicSlug, b.CreatedAt, b.UpdatedAt);
+        b.Id, b.UserId, b.Name, b.BusinessType, b.PublicSlug, b.LogoUrl, b.CreatedAt, b.UpdatedAt);
 
 }

@@ -4,10 +4,10 @@ import { apiGet, apiPost } from '../api/client'
 import { APP_NAME } from '../constants'
 import { formatDateAndTime, formatTimeOnly } from '../utils/format'
 
-type PublicBusiness = { id: string; name: string; publicSlug: string | null }
+type PublicBusiness = { id: string; name: string; publicSlug: string | null; logoUrl?: string | null }
 type PublicService = { id: string; name: string; durationMinutes: number; price: number | null }
 type SlotWithAvailability = { scheduledAtUtc: string; available: boolean }
-type PublicEmployee = { id: string; name: string; role?: string | null }
+type PublicEmployee = { id: string; name: string; role?: string | null; servicePrices?: { serviceId: string; price: number }[] }
 
 export default function AgendarPublico() {
   const { slug } = useParams<{ slug: string }>()
@@ -145,30 +145,25 @@ export default function AgendarPublico() {
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-lg mx-auto">
         <div className="text-center mb-6">
-          <Link to="/" className="text-lg font-semibold text-primary hover:underline">{APP_NAME}</Link>
+          {business.logoUrl ? (
+            <img
+              src={business.logoUrl}
+              alt={business.name}
+              className="mx-auto h-20 w-20 rounded-full object-cover border border-gray-200 shadow-sm"
+            />
+          ) : (
+            <div className="mx-auto h-20 w-20 rounded-full bg-primary flex items-center justify-center shadow-sm">
+              <span className="text-white text-2xl font-bold select-none">
+                {business.name.trim().charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+          <p className="mt-3 text-lg font-semibold text-gray-900">{business.name}</p>
         </div>
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Agendar em {business.name}</h1>
+        <h1 className="text-xl font-semibold text-gray-900 mb-1">Agendar horário</h1>
         <p className="text-gray-600 text-sm mb-6">Preencha os dados abaixo para agendar.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="service" className="block text-sm font-medium text-gray-700 mb-1">Serviço *</label>
-            <select
-              id="service"
-              value={selectedServiceId}
-              onChange={(e) => setSelectedServiceId(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-900 focus:ring-2 focus:ring-primary focus:border-primary"
-              required
-            >
-              <option value="">Selecione o serviço</option>
-              {services.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.durationMinutes} min{s.price != null ? ` — R$ ${s.price.toFixed(2).replace('.', ',')}` : ''})
-                </option>
-              ))}
-            </select>
-          </div>
-
           {employees.length > 0 && (
             <div>
               <label htmlFor="employee" className="block text-sm font-medium text-gray-700 mb-1">Profissional</label>
@@ -187,6 +182,29 @@ export default function AgendarPublico() {
               </select>
             </div>
           )}
+
+          <div>
+            <label htmlFor="service" className="block text-sm font-medium text-gray-700 mb-1">Serviço *</label>
+            <select
+              id="service"
+              value={selectedServiceId}
+              onChange={(e) => setSelectedServiceId(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-900 focus:ring-2 focus:ring-primary focus:border-primary"
+              required
+            >
+              <option value="">Selecione o serviço</option>
+              {services.map((s) => {
+                const selectedEmp = selectedEmployeeId ? employees.find(e => e.id === selectedEmployeeId) : null
+                const empPrice = selectedEmp?.servicePrices?.find(p => p.serviceId === s.id)
+                const effectivePrice = empPrice != null ? empPrice.price : s.price
+                return (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.durationMinutes} min{effectivePrice != null ? ` — R$ ${effectivePrice.toFixed(2).replace('.', ',')}` : ''})
+                  </option>
+                )
+              })}
+            </select>
+          </div>
 
           <div>
             <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">Data *</label>

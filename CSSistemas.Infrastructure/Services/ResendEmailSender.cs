@@ -404,4 +404,31 @@ public class ResendEmailSender : IEmailSender
             throw;
         }
     }
+
+    public async Task SendEmailVerificationAsync(string toEmail, string userName, string code, CancellationToken cancellationToken = default)
+    {
+        var apiKey = _settings.ResendApiKey?.Trim();
+        if (string.IsNullOrEmpty(apiKey)) { _logger.LogWarning("Resend configurado mas ResendApiKey vazio."); return; }
+        var from = string.IsNullOrWhiteSpace(_settings.FromEmail) ? "CS Sistemas <onboarding@resend.dev>" : $"{_settings.FromName} <{_settings.FromEmail}>";
+        var body = new
+        {
+            from,
+            to = new[] { toEmail },
+            subject = "Confirme seu e-mail - CS Sistemas",
+            html = $@"<p>Olá, {System.Net.WebUtility.HtmlEncode(userName)}.</p>
+<p>Seu código de verificação de e-mail é:</p>
+<h2 style=""letter-spacing:8px;font-size:36px;font-weight:bold;color:#1d4ed8;"">{code}</h2>
+<p>Este código expira em <strong>10 minutos</strong>. Não compartilhe com ninguém.</p>
+<p>Se não foi você, ignore este e-mail.</p>
+<p>— CS Sistemas</p>"
+        };
+        try
+        {
+            using var client = _httpClientFactory.CreateClient();
+            client.DefaultRequestHeaders.Add("Authorization", "Bearer " + apiKey);
+            var response = await client.PostAsJsonAsync(ResendApiUrl, body, cancellationToken);
+            if (!response.IsSuccessStatusCode) { var err = await response.Content.ReadAsStringAsync(cancellationToken); _logger.LogError("Resend API erro {StatusCode}: {Body}", response.StatusCode, err); }
+        }
+        catch (Exception ex) { _logger.LogError(ex, "Falha ao enviar verificação de e-mail para {Email} via Resend", toEmail); }
+    }
 }

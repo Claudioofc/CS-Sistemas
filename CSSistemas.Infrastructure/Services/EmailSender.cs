@@ -149,6 +149,18 @@ public class EmailSender : IEmailSender
         await SendAsync(message, cancellationToken);
     }
 
+    public async Task SendEmailVerificationAsync(string toEmail, string userName, string code, CancellationToken cancellationToken = default)
+    {
+        if (!IsConfigured())
+        {
+            _logger.LogInformation("E-mail não configurado. Código de verificação para {Email}: {Code}", toEmail, code);
+            return;
+        }
+        var body = $"Olá, {userName}.\n\nSeu código de verificação de e-mail é:\n\n{code}\n\nEste código expira em 10 minutos. Não compartilhe com ninguém.\n\nSe não foi você, ignore este e-mail.\n\n— CS Sistemas";
+        var message = BuildMessage(toEmail, "Confirme seu e-mail - CS Sistemas", body);
+        await SendAsync(message, cancellationToken);
+    }
+
     // -------------------------------------------------------------------------
 
     private bool IsConfigured()

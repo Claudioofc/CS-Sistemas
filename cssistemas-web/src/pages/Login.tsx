@@ -26,6 +26,7 @@ export default function Login() {
   const [locked, setLocked] = useState(false)
   const [loading, setLoading] = useState(false)
   const [shakeKey, setShakeKey] = useState(0)
+
   const { login } = useAuth()
   const navigate = useNavigate()
   const formRef = useRef<HTMLDivElement>(null)
@@ -38,8 +39,9 @@ export default function Login() {
     setLoading(true)
     const result = await login(email, password)
     setLoading(false)
-    if (result.ok) navigate(ROUTES.DASHBOARD, { replace: true })
-    else {
+    if (result.ok) {
+      navigate(ROUTES.DASHBOARD, { replace: true })
+    } else {
       setError(result.message ?? 'Erro ao entrar.')
       if (result.locked) setLocked(true)
       else if (result.attemptsRemaining != null) setAttemptsRemaining(result.attemptsRemaining)

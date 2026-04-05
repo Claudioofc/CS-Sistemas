@@ -15,9 +15,10 @@ export type User = {
   documentNumber: string | null
   isAdmin: boolean
   showWelcomeBanner: boolean
+  emailVerified: boolean
 }
 
-export type RegisterResult = { ok: true } | { ok: false; message: string; errors?: { campo: string; mensagem: string }[] }
+export type RegisterResult = { ok: true; requiresEmailVerification: true; pendingEmail: string } | { ok: false; message: string; errors?: { campo: string; mensagem: string }[] }
 
 export type SubscriptionStatus = {
   hasAccess: boolean
@@ -39,6 +40,7 @@ type AuthContextType = {
   setUser: (u: User | null) => void
   updateProfile: (data: { name: string; profilePhotoUrl?: string | null; documentType?: DocumentType | null; documentNumber?: string | null }) => Promise<{ ok: boolean; message?: string; errors?: { campo: string; mensagem: string }[] }>
   dismissWelcomeBanner: () => Promise<void>
+  verifyEmail: (email: string, code: string) => Promise<{ ok: boolean; message?: string }>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -75,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false)
       return
     }
-    const res = await apiGet<{ id: string; email: string; name: string; profilePhotoUrl: string | null; documentType?: number | null; documentNumber?: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean }>('/api/auth/me', t)
+    const res = await apiGet<{ id: string; email: string; name: string; profilePhotoUrl: string | null; documentType?: number | null; documentNumber?: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean; emailVerified?: boolean }>('/api/auth/me', t)
     if (res.ok) {
       setToken(t)
       setUser({
@@ -87,6 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         documentNumber: res.data.documentNumber ?? null,
         isAdmin: res.data.isAdmin ?? false,
         showWelcomeBanner: res.data.showWelcomeBanner ?? false,
+        emailVerified: res.data.emailVerified ?? true,
       })
     } else {
       setToken(null)
@@ -107,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchUser])
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await apiPost<{ email: string; password: string }, { token: string; email: string; name: string; profilePhotoUrl?: string | null }>(
+    const res = await apiPost<{ email: string; password: string }, { token: string; email: string; name?: string; profilePhotoUrl?: string | null }>(
       '/api/auth/login',
       { email, password }
     )
@@ -122,16 +125,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     localStorage.setItem(TOKEN_KEY, res.data.token)
     setToken(res.data.token)
-    // Dados iniciais do login; fetchUser() em seguida traz perfil completo (incluindo foto persistida)
     setUser({
       id: '',
       email: res.data.email,
-      name: res.data.name,
+      name: res.data.name ?? '',
       profilePhotoUrl: res.data.profilePhotoUrl ?? null,
       documentType: null,
       documentNumber: null,
       isAdmin: false,
       showWelcomeBanner: true,
+      emailVerified: true,
     })
     await fetchUser()
     return { ok: true }
@@ -148,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const docDigits = documentNumber.replace(/\D/g, '').trim()
       const res = await apiPost<
         { name: string; email: string; password: string; documentType: number; documentNumber: string },
-        { token: string; email: string; name: string; profilePhotoUrl?: string | null }
+        { requiresEmailVerification: boolean; email: string }
       >(
         '/api/auth/register',
         { name, email, password, documentType, documentNumber: docDigits }
@@ -157,29 +160,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const err = res.error as { mensagem?: string; message?: string; erros?: { campo: string; mensagem: string }[] }
         return { ok: false, message: err.mensagem ?? err.message ?? 'Erro ao criar conta.', errors: err.erros }
       }
-      localStorage.setItem(TOKEN_KEY, res.data.token)
-      setToken(res.data.token)
-      setUser({
-        id: '',
-        email: res.data.email,
-        name: res.data.name,
-        profilePhotoUrl: res.data.profilePhotoUrl ?? null,
-        documentType: null,
-        documentNumber: null,
-        isAdmin: false,
-        showWelcomeBanner: true,
-      })
-      await fetchUser()
-      return { ok: true }
+      return { ok: true, requiresEmailVerification: true, pendingEmail: res.data.email }
     } catch {
       return { ok: false, message: 'Verifique sua conexão e tente novamente.' }
     }
-  }, [fetchUser])
+  }, [])
 
   const updateProfile = useCallback(async (payload: { name: string; profilePhotoUrl?: string | null; documentType?: DocumentType | null; documentNumber?: string | null }) => {
     const t = localStorage.getItem(TOKEN_KEY)
     if (!t) return { ok: false, message: 'Não autenticado.' }
-    type ProfileResponse = { id: string; email: string; name: string; profilePhotoUrl: string | null; documentType: number | null; documentNumber: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean }
+    type ProfileResponse = { id: string; email: string; name: string; profilePhotoUrl: string | null; documentType: number | null; documentNumber: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean; emailVerified?: boolean }
     const res = await apiPatch<typeof payload, ProfileResponse>(
       '/api/auth/profile',
       { name: payload.name, profilePhotoUrl: payload.profilePhotoUrl ?? null, documentType: payload.documentType ?? null, documentNumber: payload.documentNumber ?? null },
@@ -199,6 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       documentNumber: profile.documentNumber ?? null,
       isAdmin: profile.isAdmin ?? false,
       showWelcomeBanner: profile.showWelcomeBanner ?? false,
+      emailVerified: profile.emailVerified ?? true,
     })
     return { ok: true }
   }, [])
@@ -212,6 +203,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user])
 
+  const verifyEmail = useCallback(async (email: string, code: string) => {
+    const res = await apiPost<{ email: string; code: string }, { token: string; email: string; name: string; profilePhotoUrl?: string | null }>(
+      '/api/auth/verify-email',
+      { email, code }
+    )
+    if (!res.ok) {
+      const err = res.error as { message?: string; mensagem?: string }
+      return { ok: false, message: err.message ?? err.mensagem ?? 'Código inválido ou expirado.' }
+    }
+    localStorage.setItem(TOKEN_KEY, res.data.token)
+    setToken(res.data.token)
+    setUser({
+      id: '',
+      email: res.data.email,
+      name: res.data.name,
+      profilePhotoUrl: res.data.profilePhotoUrl ?? null,
+      documentType: null,
+      documentNumber: null,
+      isAdmin: false,
+      showWelcomeBanner: true,
+      emailVerified: true,
+    })
+    await fetchUser()
+    return { ok: true }
+  }, [fetchUser])
+
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY)
     setToken(null)
@@ -220,7 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, subscriptionStatus, fetchSubscriptionStatus, login, register, logout, fetchUser, setUser, updateProfile, dismissWelcomeBanner }}>
+    <AuthContext.Provider value={{ token, user, isLoading, subscriptionStatus, fetchSubscriptionStatus, login, register, logout, fetchUser, setUser, updateProfile, dismissWelcomeBanner, verifyEmail }}>
       {children}
     </AuthContext.Provider>
   )

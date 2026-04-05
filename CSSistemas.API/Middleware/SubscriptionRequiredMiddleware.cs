@@ -20,7 +20,8 @@ public class SubscriptionRequiredMiddleware
         ("/api/auth/profile-photo", "POST"),
         ("/api/auth/welcome-banner-dismissed", "POST"),
         ("/api/subscription/status", "GET"),
-        ("/api/plans", "GET")
+        ("/api/plans", "GET"),
+        ("/api/auth/verify-email", "POST")
     };
 
     private readonly RequestDelegate _next;

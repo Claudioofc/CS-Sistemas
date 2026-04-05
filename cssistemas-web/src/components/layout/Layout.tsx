@@ -392,12 +392,12 @@ export default function Layout() {
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-white rounded-xl shadow-xl max-w-lg w-full my-8 p-6" role="dialog" aria-labelledby="welcome-modal-title" aria-modal="true">
               <h2 id="welcome-modal-title" className="text-xl font-semibold text-gray-900 mb-4">Bem-vindo ao {APP_NAME}</h2>
-              <p className="text-gray-700 mb-3">Este é o seu painel. Use-o para gerenciar agendamentos, clientes e serviços.</p>
+              <p className="text-gray-700 mb-3">Este é o seu painel. Veja abaixo como começar:</p>
               <div className="space-y-3 text-sm text-gray-600">
-                <p><strong>1. Configure seu negócio</strong><br />Em <strong>Configurações</strong>, cadastre sua empresa: nome, tipo e um <strong>slug</strong> (ex.: minha-empresa). Esse slug forma o link de agendamento: <em>seusite.com/agendar/minha-empresa</em>.</p>
-                <p><strong>2. Cadastre serviços e horários</strong><br />Em <strong>Serviços</strong>, crie cada serviço (nome, duração, preço). Depois, defina os horários de funcionamento por dia da semana.</p>
-                <p><strong>3. Compartilhe o link com seus clientes</strong><br />O link de agendamento é <strong>/agendar/[seu-slug]</strong>. O cliente abre, escolhe serviço e horário e agenda sem precisar criar conta.</p>
-                <p><strong>4. Acompanhe no painel</strong><br />Em <strong>Agendamentos</strong> você vê todos os agendamentos; em <strong>Clientes</strong> mantém o cadastro; em <strong>Ganhos</strong> e <strong>Dashboard</strong> acompanha o resumo.</p>
+                <p><strong>1. Configure sua empresa</strong><br />Em <strong>Configurações</strong>, cadastre sua empresa e faça upload da <strong>logo</strong>. Defina um <strong>slug</strong> (ex.: minha-empresa) para gerar o link de agendamento: <em>seusite.com/agendar/minha-empresa</em>. Configure também os horários de funcionamento.</p>
+                <p><strong>2. Cadastre serviços e funcionários</strong><br />Em <strong>Serviços</strong>, crie cada serviço (nome, duração, preço padrão). Se sua equipe tiver preços individuais, defina o <strong>preço por funcionário</strong> dentro de cada serviço. Adicione novos funcionários pelo botão <strong>Novo funcionário</strong>.</p>
+                <p><strong>3. Compartilhe o link com seus clientes</strong><br />O cliente acessa <strong>/agendar/[seu-slug]</strong>, escolhe o profissional, vê o preço do serviço para aquele profissional, escolhe data e horário e agenda sem criar conta.</p>
+                <p><strong>4. Acompanhe no painel</strong><br />Em <strong>Agendamentos</strong> veja todos os agendamentos; em <strong>Clientes</strong> mantenha o cadastro; em <strong>Ganhos</strong> e <strong>Dashboard</strong> acompanhe o resumo financeiro.</p>
                 <p><strong>5. Dúvidas?</strong><br />Use <strong>Fale conosco</strong> no menu para enviar uma mensagem ao suporte.</p>
               </div>
               <div className="mt-6 flex justify-end">

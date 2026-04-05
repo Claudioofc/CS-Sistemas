@@ -18,15 +18,18 @@ public class ServicesController : ControllerBase
     private readonly IServiceRepository _repository;
     private readonly IBusinessRepository _businessRepository;
     private readonly IValidator<ServiceRequest> _validator;
+    private readonly IEmployeeServicePriceRepository _priceRepo;
 
     public ServicesController(
         IServiceRepository repository,
         IBusinessRepository businessRepository,
-        IValidator<ServiceRequest> validator)
+        IValidator<ServiceRequest> validator,
+        IEmployeeServicePriceRepository priceRepo)
     {
         _repository = repository;
         _businessRepository = businessRepository;
         _validator = validator;
+        _priceRepo = priceRepo;
     }
 
     /// <summary>Lista serviços de um negócio (apenas se o negócio pertencer ao usuário).</summary>
@@ -113,6 +116,23 @@ public class ServicesController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Define o preço que cada funcionário cobra por este serviço.</summary>
+    [HttpPut("{id:guid}/employee-prices")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetEmployeePrices(Guid id, [FromQuery] Guid businessId, [FromBody] List<ServiceEmployeePriceRequest> request, CancellationToken cancellationToken = default)
+    {
+        var userId = User.GetUserId();
+        if (userId == null) return Unauthorized();
+        var business = await _businessRepository.GetByIdAndUserIdAsync(businessId, userId.Value, cancellationToken);
+        if (business == null) throw CommException.NotFound("Negócio não encontrado.");
+        var prices = (request ?? new()).Select(p => (p.EmployeeId, p.Price));
+        await _priceRepo.ReplaceAllForServiceAsync(id, businessId, prices, cancellationToken);
+        return NoContent();
+    }
+
     private static ServiceResponse ToResponse(Service s) => new(
         s.Id, s.BusinessId, s.Name, s.DurationMinutes, s.Price, s.IsActive, s.CreatedAt, s.UpdatedAt);
 }
+
+public record ServiceEmployeePriceRequest(Guid EmployeeId, decimal Price);

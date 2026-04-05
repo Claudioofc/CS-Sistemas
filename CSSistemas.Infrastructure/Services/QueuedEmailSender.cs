@@ -63,6 +63,11 @@ public sealed class QueuedEmailSender : IEmailSender
         return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.AppointmentReminder, null, null, toEmail, clientName, scheduledAtFormatted, serviceName, businessName, cancelLink, null), cancellationToken);
     }
 
+    public Task SendEmailVerificationAsync(string toEmail, string userName, string code, CancellationToken cancellationToken = default)
+    {
+        return EnqueueAsync(new EmailWorkItem(EmailWorkItemKind.EmailVerification, null, null, toEmail, null, null, null, null, null, null, TwoFactorUserName: userName, TwoFactorCode: code), cancellationToken);
+    }
+
     private async Task EnqueueAsync(EmailWorkItem item, CancellationToken cancellationToken)
     {
         if (await _channel.WaitToWriteAsync(cancellationToken))

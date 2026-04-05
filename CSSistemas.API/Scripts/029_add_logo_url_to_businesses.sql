@@ -1,0 +1,1 @@
+ALTER TABLE "Businesses" ADD COLUMN IF NOT EXISTS "LogoUrl" TEXT;

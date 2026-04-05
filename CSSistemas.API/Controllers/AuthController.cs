@@ -90,10 +90,10 @@ public class AuthController : ControllerBase
         };
     }
 
-    /// <summary>Registro — cria usuário e retorna JWT.</summary>
+    /// <summary>Registro — cria usuário, envia OTP por e-mail e aguarda verificação.</summary>
     [HttpPost("register")]
     [EnableRateLimiting("auth")]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken)
     {
@@ -106,12 +106,30 @@ public class AuthController : ControllerBase
             var result = await _authService.RegisterAsync(request, cancellationToken);
             if (result == null)
                 throw CommException.BadRequest("Email já cadastrado.");
-            return Ok(result);
+            return Ok(new { requiresEmailVerification = true, email = result.Email });
         }
         catch (DbUpdateException)
         {
             throw CommException.BadRequest("Email já cadastrado.");
         }
+    }
+
+    /// <summary>Verifica OTP enviado por e-mail no cadastro. Retorna JWT se válido.</summary>
+    [HttpPost("verify-email")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> VerifyEmail([FromBody] EmailVerifyRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Code))
+            return Unauthorized(new { message = "Código inválido." });
+
+        var response = await _authService.VerifyEmailAsync(request.Email, request.Code, cancellationToken);
+        if (response == null)
+            return Unauthorized(new { message = "Código inválido ou expirado." });
+
+        return Ok(response);
     }
 
     /// <summary>Esqueci minha senha: envia e-mail com link para redefinir (não revela se o e-mail existe).</summary>
@@ -177,7 +195,7 @@ public class AuthController : ControllerBase
         if (userId == null) return Unauthorized();
         var user = await _userRepository.GetByIdAsync(userId.Value, cancellationToken);
         if (user == null) throw CommException.NotFound("Usuário não encontrado.");
-        return Ok(new CurrentUserResponse(user.Id, user.Email, user.Name, user.ProfilePhotoUrl, user.DocumentType, user.DocumentNumber, user.IsAdmin, user.ShowWelcomeBanner));
+        return Ok(new CurrentUserResponse(user.Id, user.Email, user.Name, user.ProfilePhotoUrl, user.DocumentType, user.DocumentNumber, user.IsAdmin, user.ShowWelcomeBanner, user.EmailVerified));
     }
 
     /// <summary>Marca que o usuário visualizou o banner de boas-vindas (não exibir mais).</summary>
@@ -267,3 +285,5 @@ public class AuthController : ControllerBase
     }
 
 }
+
+public record EmailVerifyRequest(string Email, string Code);

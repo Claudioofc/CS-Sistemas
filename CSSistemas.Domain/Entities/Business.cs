@@ -9,6 +9,7 @@ public class Business : EntityBase
     public string Name { get; protected set; } = string.Empty;
     public BusinessType BusinessType { get; protected set; }
     public string? PublicSlug { get; protected set; }
+    public string? LogoUrl { get; protected set; }
 
     public User User { get; protected set; } = null!;
     public ICollection<Service> Services { get; protected set; } = new List<Service>();
@@ -41,6 +42,12 @@ public class Business : EntityBase
         Name = name.Trim();
         BusinessType = businessType;
         PublicSlug = string.IsNullOrWhiteSpace(publicSlug) ? null : publicSlug.Trim().ToLowerInvariant();
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void UpdateLogo(string? logoUrl)
+    {
+        LogoUrl = string.IsNullOrWhiteSpace(logoUrl) ? null : logoUrl.Trim();
         UpdatedAt = DateTime.UtcNow;
     }
 }

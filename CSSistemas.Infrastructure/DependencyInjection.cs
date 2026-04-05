@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.AddHostedService<SubscriptionExpiryWarningService>();
         services.AddHostedService<AppointmentReminderService>();
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+        services.AddScoped<IEmployeeServicePriceRepository, EmployeeServicePriceRepository>();
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IBusinessRepository, BusinessRepository>();
         services.AddScoped<IServiceRepository, ServiceRepository>();

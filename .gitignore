@@ -31,3 +31,6 @@ secrets.json
 .env
 .env.local
 .env.*.local
+
+# Uploads de usuários (fotos de perfil, logos) — dados de clientes, nunca versionar
+**/wwwroot/uploads/

@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import InputWithIcon from '../components/ui/InputWithIcon'
 import AuthPageLayout, { AuthCardHeader } from '../components/layout/AuthPageLayout'
 import { useAuth } from '../contexts/AuthContext'
-import { ROUTES } from '../constants'
+import { ROUTES, APP_NAME } from '../constants'
 import { filterDocumentInput, getDocumentRequiredLength, getDocumentPlaceholder, getDocumentMaxLength } from '../utils/document'
 
 const IconUser = () => (
@@ -30,6 +31,12 @@ const IconDocument = () => (
   </svg>
 )
 
+const IconShield = () => (
+  <svg className="w-7 h-7 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+  </svg>
+)
+
 /** Retorna mensagens de erro por campo (backend: Name, Email, Password, DocumentType, DocumentNumber). */
 function getFieldError(campo: string, errors?: { campo: string; mensagem: string }[]): string | undefined {
   if (!errors?.length) return undefined
@@ -47,7 +54,15 @@ export default function CriarConta() {
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<{ campo: string; mensagem: string }[]>([])
   const [loading, setLoading] = useState(false)
-  const { register } = useAuth()
+  const [shakeKey, setShakeKey] = useState(0)
+  const formRef = useRef<HTMLDivElement>(null)
+
+  // Passo de verificação por e-mail
+  const [verifyPending, setVerifyPending] = useState(false)
+  const [pendingEmail, setPendingEmail] = useState('')
+  const [verifyCode, setVerifyCode] = useState('')
+
+  const { register, verifyEmail } = useAuth()
   const navigate = useNavigate()
 
   async function handleSubmit(e: React.FormEvent) {
@@ -65,7 +80,8 @@ export default function CriarConta() {
     const result = await register(name, email, password, documentType, documentNumber)
     setLoading(false)
     if (result.ok) {
-      navigate(ROUTES.DASHBOARD, { replace: true })
+      setPendingEmail(result.pendingEmail)
+      setVerifyPending(true)
       return
     }
     if (result.errors?.length) {
@@ -74,12 +90,102 @@ export default function CriarConta() {
     } else {
       setError(result.message ?? 'Erro ao criar conta.')
     }
+    setShakeKey(k => k + 1)
+  }
+
+  async function handleVerifySubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    const result = await verifyEmail(pendingEmail, verifyCode.trim())
+    setLoading(false)
+    if (result.ok) {
+      navigate(ROUTES.DASHBOARD, { replace: true })
+    } else {
+      setError(result.message ?? 'Código inválido ou expirado.')
+      setShakeKey(k => k + 1)
+    }
   }
 
   const nameErr = getFieldError('name', fieldErrors)
   const emailErr = getFieldError('email', fieldErrors)
   const passwordErr = getFieldError('password', fieldErrors)
   const documentErr = getFieldError('documentNumber', fieldErrors) ?? getFieldError('documentType', fieldErrors)
+
+  if (verifyPending) {
+    return (
+      <AuthPageLayout>
+        <AuthCardHeader title="Confirme seu e-mail" centerTitle />
+
+        <div className="mb-5 text-center">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-3">
+            <IconShield />
+          </div>
+          <p className="text-sm text-gray-600">
+            Enviamos um código de 6 dígitos para<br />
+            <span className="font-medium text-gray-800">{pendingEmail}</span>
+          </p>
+          <p className="text-xs text-gray-500 mt-1">Verifique sua caixa de entrada. O código expira em 10 minutos.</p>
+        </div>
+
+        <div key={shakeKey} ref={formRef} className={shakeKey > 0 ? 'shake' : ''}>
+          <form className="space-y-5" onSubmit={handleVerifySubmit}>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={verifyCode}
+              onChange={e => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              autoComplete="one-time-code"
+              autoFocus
+              disabled={loading}
+              className="w-full text-center text-3xl font-bold tracking-[0.5em] border border-gray-300 rounded-xl px-4 py-4 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition disabled:opacity-60"
+            />
+
+            {error && (
+              <motion.p
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-sm text-red-600"
+                role="alert"
+              >
+                {error}
+              </motion.p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || verifyCode.length < 6}
+              className="w-full min-h-[48px] py-3 rounded-xl bg-primary text-white font-semibold hover:bg-primary-hover transition active:scale-[0.98] touch-manipulation disabled:opacity-70 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  Verificando...
+                </>
+              ) : 'Verificar e entrar'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setVerifyPending(false); setVerifyCode(''); setError('') }}
+              className="w-full text-sm text-gray-500 hover:text-gray-700 py-2"
+            >
+              Voltar e corrigir dados
+            </button>
+          </form>
+        </div>
+
+        <p className="mt-4 text-center text-gray-500 text-xs sm:text-sm">
+          © {APP_NAME} 2026 — Todos os direitos reservados
+        </p>
+      </AuthPageLayout>
+    )
+  }
 
   return (
     <AuthPageLayout>

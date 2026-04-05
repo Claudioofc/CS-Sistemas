@@ -28,6 +28,12 @@ export type BusinessItem = {
   name: string
   businessType: number
   publicSlug?: string | null
+  logoUrl?: string | null
+}
+
+export type EmployeeServicePriceItem = {
+  serviceId: string
+  price: number
 }
 
 export type EmployeeItem = {
@@ -35,4 +41,5 @@ export type EmployeeItem = {
   name: string
   role?: string | null
   isActive: boolean
+  servicePrices?: EmployeeServicePriceItem[]
 }
