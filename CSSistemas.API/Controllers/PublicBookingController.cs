@@ -112,6 +112,7 @@ public class PublicBookingController : ControllerBase
 
     /// <summary>Cria agendamento via link público (sem login).</summary>
     [HttpPost("{slug}/appointments")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-booking")]
     [ProducesResponseType(typeof(AppointmentCreatedDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

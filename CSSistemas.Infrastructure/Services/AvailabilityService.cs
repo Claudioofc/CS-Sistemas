@@ -2,6 +2,7 @@ using CSSistemas.Application.DTOs.PublicBooking;
 using CSSistemas.Application.Helpers;
 using CSSistemas.Application.Interfaces;
 using CSSistemas.Domain.Entities;
+using CSSistemas.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace CSSistemas.Infrastructure.Services;
@@ -39,45 +40,26 @@ public class AvailabilityService : IAvailabilityService
         if (service == null || !service.IsActive)
             return Array.Empty<DateTime>();
 
-        // Sempre tratar a data como dia civil no fuso Brasil (evita bug quando o servidor está em outro fuso)
-        var dateOnly = new DateOnly(date.Year, date.Month, date.Day);
-        var dayOfWeek = (int)dateOnly.DayOfWeek; // 0=Sunday, 1=Monday, ..., 6=Saturday
-        var hoursList = await _hoursRepo.GetByBusinessIdAsync(businessId, cancellationToken);
-        var dayHours = hoursList.FirstOrDefault(h => h.DayOfWeek == dayOfWeek);
-
-        int openMin, closeMin;
-        if (dayHours != null)
-        {
-            openMin = dayHours.OpenAtMinutes;
-            closeMin = dayHours.CloseAtMinutes;
-        }
-        else
-        {
-            // Default: Segunda a Sexta 8h-18h
-            if (dayOfWeek == 0 || dayOfWeek == 6)
-                return Array.Empty<DateTime>();
-            openMin = DefaultOpenMinutes;
-            closeMin = DefaultCloseMinutes;
-        }
+        var (openMin, closeMin, dateOnly) = await GetHoursAsync(businessId, date, cancellationToken);
+        if (openMin < 0) return Array.Empty<DateTime>();
 
         var duration = service.DurationMinutes;
         if (closeMin - openMin < duration)
             return Array.Empty<DateTime>();
 
-        var slots = new List<DateTime>();
+        // Carrega todos os agendamentos ativos do dia uma única vez (evita N+1)
+        var dayAppointments = await LoadDayAppointmentsAsync(businessId, dateOnly, cancellationToken);
 
+        var slots = new List<DateTime>();
         for (var minute = openMin; minute + duration <= closeMin; minute += slotIntervalMinutes)
         {
-            // Horário de início no Brasil (Unspecified) e converter para UTC
             var localStart = dateOnly.ToDateTime(new TimeOnly(minute / 60, minute % 60));
             var utcStart = TimeZoneInfo.ConvertTimeToUtc(localStart, BrazilTz);
 
-            // Não oferecer horários no passado (em UTC)
             if (utcStart < DateTime.UtcNow)
                 continue;
 
-            var hasConflict = await _appointmentRepo.HasConflictAsync(businessId, utcStart, duration, null, null, null, cancellationToken);
-            if (!hasConflict)
+            if (!HasConflictInMemory(dayAppointments, utcStart, duration, null, null))
                 slots.Add(utcStart);
         }
 
@@ -90,24 +72,8 @@ public class AvailabilityService : IAvailabilityService
         if (service == null || !service.IsActive)
             return Array.Empty<SlotWithAvailabilityDto>();
 
-        var dateOnly = new DateOnly(date.Year, date.Month, date.Day);
-        var dayOfWeek = (int)dateOnly.DayOfWeek;
-        var hoursList = await _hoursRepo.GetByBusinessIdAsync(businessId, cancellationToken);
-        var dayHours = hoursList.FirstOrDefault(h => h.DayOfWeek == dayOfWeek);
-
-        int openMin, closeMin;
-        if (dayHours != null)
-        {
-            openMin = dayHours.OpenAtMinutes;
-            closeMin = dayHours.CloseAtMinutes;
-        }
-        else
-        {
-            if (dayOfWeek == 0 || dayOfWeek == 6)
-                return Array.Empty<SlotWithAvailabilityDto>();
-            openMin = DefaultOpenMinutes;
-            closeMin = DefaultCloseMinutes;
-        }
+        var (openMin, closeMin, dateOnly) = await GetHoursAsync(businessId, date, cancellationToken);
+        if (openMin < 0) return Array.Empty<SlotWithAvailabilityDto>();
 
         var duration = service.DurationMinutes;
         if (closeMin - openMin < duration)
@@ -122,8 +88,10 @@ public class AvailabilityService : IAvailabilityService
                 capacity = activeCount;
         }
 
-        var result = new List<SlotWithAvailabilityDto>();
+        // Carrega todos os agendamentos ativos do dia uma única vez (evita N+1)
+        var dayAppointments = await LoadDayAppointmentsAsync(businessId, dateOnly, cancellationToken);
 
+        var result = new List<SlotWithAvailabilityDto>();
         for (var minute = openMin; minute + duration <= closeMin; minute += slotIntervalMinutes)
         {
             var localStart = dateOnly.ToDateTime(new TimeOnly(minute / 60, minute % 60));
@@ -132,10 +100,64 @@ public class AvailabilityService : IAvailabilityService
             if (utcStart < DateTime.UtcNow)
                 continue;
 
-            var hasConflict = await _appointmentRepo.HasConflictAsync(businessId, utcStart, duration, null, employeeId, capacity, cancellationToken);
+            var hasConflict = HasConflictInMemory(dayAppointments, utcStart, duration, employeeId, capacity);
             result.Add(new SlotWithAvailabilityDto(utcStart, !hasConflict));
         }
 
         return result;
+    }
+
+    // -------------------------------------------------------------------------
+
+    private async Task<(int OpenMin, int CloseMin, DateOnly DateOnly)> GetHoursAsync(Guid businessId, DateTime date, CancellationToken cancellationToken)
+    {
+        var dateOnly = new DateOnly(date.Year, date.Month, date.Day);
+        var dayOfWeek = (int)dateOnly.DayOfWeek;
+        var hoursList = await _hoursRepo.GetByBusinessIdAsync(businessId, cancellationToken);
+        var dayHours = hoursList.FirstOrDefault(h => h.DayOfWeek == dayOfWeek);
+
+        if (dayHours != null)
+            return (dayHours.OpenAtMinutes, dayHours.CloseAtMinutes, dateOnly);
+
+        // Default: Segunda a Sexta 8h-18h; fora disso fechado
+        if (dayOfWeek == 0 || dayOfWeek == 6)
+            return (-1, -1, dateOnly);
+
+        return (DefaultOpenMinutes, DefaultCloseMinutes, dateOnly);
+    }
+
+    private async Task<IReadOnlyList<Appointment>> LoadDayAppointmentsAsync(Guid businessId, DateOnly dateOnly, CancellationToken cancellationToken)
+    {
+        // Janela em UTC cobrindo todo o dia civil no Brasil (UTC-3 = +3h de margem)
+        var dayStartLocal = dateOnly.ToDateTime(TimeOnly.MinValue);
+        var dayEndLocal = dateOnly.ToDateTime(TimeOnly.MaxValue);
+        var dayStartUtc = TimeZoneInfo.ConvertTimeToUtc(dayStartLocal, BrazilTz);
+        var dayEndUtc = TimeZoneInfo.ConvertTimeToUtc(dayEndLocal, BrazilTz);
+
+        return await _appointmentRepo.GetByBusinessIdWithServiceAsync(
+            businessId, dayStartUtc, dayEndUtc, cancellationToken);
+    }
+
+    /// <summary>Verifica conflito de horário em memória (sem query ao banco). Requer appointments pré-carregados com Service.</summary>
+    private static bool HasConflictInMemory(
+        IReadOnlyList<Appointment> appointments,
+        DateTime utcStart,
+        int durationMinutes,
+        Guid? employeeId,
+        int? capacity)
+    {
+        var utcEnd = utcStart.AddMinutes(durationMinutes);
+
+        var overlapping = appointments
+            .Where(a => a.Status != AppointmentStatus.Cancelled
+                     && a.ScheduledAt < utcEnd
+                     && a.ScheduledAt.AddMinutes(a.Service!.DurationMinutes) > utcStart)
+            .ToList();
+
+        if (employeeId.HasValue)
+            return overlapping.Any(a => a.EmployeeId == employeeId.Value);
+
+        var cap = capacity ?? 1;
+        return overlapping.Count >= cap;
     }
 }

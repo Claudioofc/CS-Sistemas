@@ -22,6 +22,8 @@ public class EmployeeServicePriceRepository : IEmployeeServicePriceRepository
 
     public async Task ReplaceAllForEmployeeAsync(Guid employeeId, IEnumerable<(Guid ServiceId, decimal Price)> prices, CancellationToken cancellationToken = default)
     {
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
         await _db.EmployeeServicePrices
             .Where(p => p.EmployeeId == employeeId)
             .ExecuteDeleteAsync(cancellationToken);
@@ -36,6 +38,8 @@ public class EmployeeServicePriceRepository : IEmployeeServicePriceRepository
             _db.EmployeeServicePrices.AddRange(newPrices);
             await _db.SaveChangesAsync(cancellationToken);
         }
+
+        await tx.CommitAsync(cancellationToken);
     }
 
     public async Task ReplaceAllForServiceAsync(Guid serviceId, Guid businessId, IEnumerable<(Guid EmployeeId, decimal Price)> prices, CancellationToken cancellationToken = default)
@@ -45,6 +49,8 @@ public class EmployeeServicePriceRepository : IEmployeeServicePriceRepository
             .Where(e => e.BusinessId == businessId && !e.IsDeleted)
             .Select(e => e.Id)
             .ToListAsync(cancellationToken);
+
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
 
         await _db.EmployeeServicePrices
             .Where(p => p.ServiceId == serviceId && employeeIds.Contains(p.EmployeeId))
@@ -60,5 +66,7 @@ public class EmployeeServicePriceRepository : IEmployeeServicePriceRepository
             _db.EmployeeServicePrices.AddRange(newPrices);
             await _db.SaveChangesAsync(cancellationToken);
         }
+
+        await tx.CommitAsync(cancellationToken);
     }
 }

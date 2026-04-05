@@ -3,6 +3,7 @@ using CSSistemas.Application.Interfaces;
 using CSSistemas.Domain.Entities;
 using CSSistemas.Domain.Enums;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 
 namespace CSSistemas.API.Middleware;
 
@@ -78,9 +79,17 @@ public class SubscriptionRequiredMiddleware
             var hasAny = await subscriptionRepo.ExistsAnyByUserIdAsync(userId, context.RequestAborted);
             if (!hasAny)
             {
-                var trial = Subscription.CreateTrial(userId);
-                await subscriptionRepo.AddAsync(trial, context.RequestAborted);
-                subscription = trial;
+                try
+                {
+                    var trial = Subscription.CreateTrial(userId);
+                    await subscriptionRepo.AddAsync(trial, context.RequestAborted);
+                    subscription = trial;
+                }
+                catch (DbUpdateException)
+                {
+                    // Race condition: outro request criou o trial simultaneamente — re-busca o existente
+                    subscription = await subscriptionRepo.GetActiveByUserIdAsync(userId, context.RequestAborted);
+                }
             }
         }
 

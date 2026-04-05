@@ -38,6 +38,15 @@ export function getProfilePhotoUrl(url: string | null | undefined, cacheBust?: s
   return base
 }
 
+const DEFAULT_TIMEOUT_MS = 15_000
+
+function withTimeout(signal?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+  if (signal) signal.addEventListener('abort', () => controller.abort())
+  return { signal: controller.signal, cleanup: () => clearTimeout(timeoutId) }
+}
+
 function authHeaders(token: string | null): HeadersInit {
   const h: HeadersInit = { 'Content-Type': 'application/json' }
   if (token) (h as Record<string, string>)['Authorization'] = `Bearer ${token}`
@@ -48,22 +57,39 @@ export async function apiGet<TResponse>(
   path: string,
   token: string | null
 ): Promise<{ ok: true; data: TResponse } | { ok: false; status: number }> {
-  const res = await fetch(buildUrl(path), { method: 'GET', headers: authHeaders(token) })
-  const data = await res.json().catch(() => ({})) as TResponse
-  if (res.ok) return { ok: true, data }
-  return { ok: false, status: res.status }
+  const { signal, cleanup } = withTimeout()
+  try {
+    const res = await fetch(buildUrl(path), { method: 'GET', headers: authHeaders(token), signal })
+    const data = await res.json().catch(() => ({})) as TResponse
+    if (res.ok) return { ok: true, data }
+    return { ok: false, status: res.status }
+  } catch {
+    return { ok: false, status: 0 }
+  } finally {
+    cleanup()
+  }
 }
 
 export async function apiPost<TBody, TResponse>(
   path: string,
   body: TBody
 ): Promise<{ ok: true; data: TResponse } | { ok: false; status: number; error: ValidationErrorResponse | { message?: string } }> {
-  const res = await fetch(buildUrl(path), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const data = await res.json().catch(() => ({})) as Record<string, unknown>
+  const { signal, cleanup } = withTimeout()
+  let res: Response
+  let data: Record<string, unknown>
+  try {
+    res = await fetch(buildUrl(path), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    })
+    data = await res.json().catch(() => ({})) as Record<string, unknown>
+  } catch {
+    return { ok: false, status: 0, error: { message: 'Erro de conexão. Verifique sua internet.' } }
+  } finally {
+    cleanup()
+  }
   if (res.ok) return { ok: true, data: data as TResponse }
   // Log para diagnóstico quando for reset-password e der erro
   if (path.includes('reset-password') && !res.ok) {
@@ -127,12 +153,22 @@ export async function apiPostWithAuth<TBody, TResponse>(
   body: TBody,
   token: string | null
 ): Promise<{ ok: true; data: TResponse } | { ok: false; status: number; error: ValidationErrorResponse | { message?: string } }> {
-  const res = await fetch(buildUrl(path), {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(body),
-  })
-  const data = await res.json().catch(() => ({})) as Record<string, unknown>
+  const { signal, cleanup } = withTimeout()
+  let res: Response
+  let data: Record<string, unknown>
+  try {
+    res = await fetch(buildUrl(path), {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify(body),
+      signal,
+    })
+    data = await res.json().catch(() => ({})) as Record<string, unknown>
+  } catch {
+    return { ok: false, status: 0, error: { message: 'Erro de conexão. Verifique sua internet.' } }
+  } finally {
+    cleanup()
+  }
   if (res.ok) return { ok: true, data: data as TResponse }
   const mensagem = (data?.mensagem ?? data?.message) as string | undefined
   const message = mensagem ?? (res.status >= 500 ? 'Erro no servidor. Tente novamente.' : 'Erro ao processar.')
@@ -145,12 +181,22 @@ export async function apiPatch<TBody, TResponse>(
   body: TBody,
   token: string | null
 ): Promise<{ ok: true; data: TResponse } | { ok: false; status: number; error: ValidationErrorResponse | { message?: string } }> {
-  const res = await fetch(buildUrl(path), {
-    method: 'PATCH',
-    headers: authHeaders(token),
-    body: JSON.stringify(body),
-  })
-  const data = await res.json().catch(() => ({})) as Record<string, unknown>
+  const { signal, cleanup } = withTimeout()
+  let res: Response
+  let data: Record<string, unknown>
+  try {
+    res = await fetch(buildUrl(path), {
+      method: 'PATCH',
+      headers: authHeaders(token),
+      body: JSON.stringify(body),
+      signal,
+    })
+    data = await res.json().catch(() => ({})) as Record<string, unknown>
+  } catch {
+    return { ok: false, status: 0, error: { message: 'Erro de conexão. Verifique sua internet.' } }
+  } finally {
+    cleanup()
+  }
   if (res.ok) return { ok: true, data: data as TResponse }
   const mensagem = (data?.mensagem ?? data?.message) as string | undefined
   const erros = (data?.erros) as { campo?: string; mensagem?: string }[] | undefined
@@ -166,12 +212,22 @@ export async function apiPut<TBody, TResponse>(
   body: TBody,
   token: string | null
 ): Promise<{ ok: true; data: TResponse } | { ok: false; status: number; error: ValidationErrorResponse | { message?: string } }> {
-  const res = await fetch(buildUrl(path), {
-    method: 'PUT',
-    headers: authHeaders(token),
-    body: JSON.stringify(body),
-  })
-  const data = await res.json().catch(() => ({})) as Record<string, unknown>
+  const { signal, cleanup } = withTimeout()
+  let res: Response
+  let data: Record<string, unknown>
+  try {
+    res = await fetch(buildUrl(path), {
+      method: 'PUT',
+      headers: authHeaders(token),
+      body: JSON.stringify(body),
+      signal,
+    })
+    data = await res.json().catch(() => ({})) as Record<string, unknown>
+  } catch {
+    return { ok: false, status: 0, error: { message: 'Erro de conexão. Verifique sua internet.' } }
+  } finally {
+    cleanup()
+  }
   if (res.ok) return { ok: true, data: data as TResponse }
   const mensagem = (data?.mensagem ?? data?.message) as string | undefined
   const erros = (data?.erros) as { campo?: string; mensagem?: string }[] | undefined
@@ -186,9 +242,16 @@ export async function apiDelete(
   path: string,
   token: string | null
 ): Promise<{ ok: true } | { ok: false; status: number; error?: { message?: string } }> {
-  const res = await fetch(buildUrl(path), { method: 'DELETE', headers: authHeaders(token) })
-  if (res.ok) return { ok: true }
-  const data = await res.json().catch(() => ({})) as Record<string, unknown>
-  const message = (data?.mensagem ?? data?.message) as string | undefined
-  return { ok: false, status: res.status, error: { message } }
+  const { signal, cleanup } = withTimeout()
+  try {
+    const res = await fetch(buildUrl(path), { method: 'DELETE', headers: authHeaders(token), signal })
+    if (res.ok) return { ok: true }
+    const data = await res.json().catch(() => ({})) as Record<string, unknown>
+    const message = (data?.mensagem ?? data?.message) as string | undefined
+    return { ok: false, status: res.status, error: { message } }
+  } catch {
+    return { ok: false, status: 0, error: { message: 'Erro de conexão. Verifique sua internet.' } }
+  } finally {
+    cleanup()
+  }
 }

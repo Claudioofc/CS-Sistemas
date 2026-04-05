@@ -6,6 +6,7 @@ using CSSistemas.Domain.Entities;
 using CSSistemas.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace CSSistemas.API.Controllers;
 
@@ -20,6 +21,7 @@ public class AdminController : ControllerBase
     private readonly IClientRepository _clientRepository;
     private readonly IPlanRepository _planRepository;
     private readonly IEmailSender _realEmailSender;
+    private readonly ILogger<AdminController> _logger;
 
     public AdminController(
         IUserRepository userRepository,
@@ -27,7 +29,8 @@ public class AdminController : ControllerBase
         IBusinessRepository businessRepository,
         IClientRepository clientRepository,
         IPlanRepository planRepository,
-        [FromKeyedServices("real")] IEmailSender realEmailSender)
+        [FromKeyedServices("real")] IEmailSender realEmailSender,
+        ILogger<AdminController> logger)
     {
         _userRepository = userRepository;
         _subscriptionRepository = subscriptionRepository;
@@ -35,6 +38,7 @@ public class AdminController : ControllerBase
         _clientRepository = clientRepository;
         _planRepository = planRepository;
         _realEmailSender = realEmailSender;
+        _logger = logger;
     }
 
     /// <summary>Envia e-mail de teste direto (sem fila) para diagnóstico de SMTP. Apenas admin.</summary>
@@ -52,7 +56,8 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { error = ex.Message });
+            _logger.LogError(ex, "Falha ao enviar e-mail de teste para {Email}", to.Trim());
+            return StatusCode(500, new { error = "Falha ao enviar e-mail. Verifique os logs do servidor." });
         }
     }
 
@@ -61,15 +66,7 @@ public class AdminController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<AdminUserResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListUsers([FromQuery] string? search, CancellationToken cancellationToken)
     {
-        var users = await _userRepository.GetAllAsync(cancellationToken);
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.Trim().ToLowerInvariant();
-            users = users.Where(u =>
-                u.Name.ToLowerInvariant().Contains(term) ||
-                u.Email.ToLowerInvariant().Contains(term)).ToList();
-        }
+        var users = await _userRepository.GetAllAsync(search, cancellationToken);
 
         var userIds = users.Select(u => u.Id).ToList();
         var activeSubs = await _subscriptionRepository.GetActiveByUserIdsAsync(userIds, cancellationToken);

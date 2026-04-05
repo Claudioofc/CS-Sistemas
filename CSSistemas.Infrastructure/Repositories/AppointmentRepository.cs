@@ -93,26 +93,23 @@ public class AppointmentRepository : IAppointmentRepository
         var start = scheduledAt.Kind == DateTimeKind.Utc ? scheduledAt : DateTime.SpecifyKind(scheduledAt, DateTimeKind.Utc);
         var end = start.AddMinutes(durationMinutes);
 
+        // Projeção leve: evita carregar entidades completas (sem Include/tracking)
         var candidates = await _context.Appointments
             .AsNoTracking()
-            .Include(a => a.Service)
             .Where(a => a.BusinessId == businessId && a.Status != AppointmentStatus.Cancelled)
             .Where(a => a.ScheduledAt < end)
+            .Select(a => new { a.Id, a.ScheduledAt, a.EmployeeId, ServiceDuration = a.Service != null ? a.Service.DurationMinutes : 0 })
             .ToListAsync(cancellationToken);
 
         if (excludeAppointmentId.HasValue)
             candidates = candidates.Where(a => a.Id != excludeAppointmentId.Value).ToList();
 
         // Filtra apenas os que realmente se sobrepõem (existingEnd > start)
-        var overlapping = candidates.Where(a => a.ScheduledAt.AddMinutes(a.Service.DurationMinutes) > start).ToList();
+        var overlapping = candidates.Where(a => a.ScheduledAt.AddMinutes(a.ServiceDuration) > start).ToList();
 
         if (employeeId.HasValue)
-        {
-            // Verifica conflito apenas para este funcionário
             return overlapping.Any(a => a.EmployeeId == employeeId.Value);
-        }
 
-        // Sem funcionário específico: usa capacidade do negócio
         var capacity = businessCapacity ?? 1;
         return overlapping.Count >= capacity;
     }
@@ -142,12 +139,13 @@ public class AppointmentRepository : IAppointmentRepository
     {
         var f = from.Kind == DateTimeKind.Utc ? from : DateTime.SpecifyKind(from, DateTimeKind.Utc);
         var t = to.Kind == DateTimeKind.Utc ? to : DateTime.SpecifyKind(to, DateTimeKind.Utc);
+        // QueryFilter já exclui IsDeleted; AsNoTracking pois só lemos os dados para envio de lembrete
         return await _context.Appointments
+            .AsNoTracking()
             .Include(a => a.Business)
             .Include(a => a.Service)
             .Where(a => a.ScheduledAt >= f
                      && a.ScheduledAt <= t
-                     && a.DeletedAt == null
                      && a.Status != AppointmentStatus.Cancelled
                      && a.ReminderSentAt == null
                      && a.ClientEmail != null)

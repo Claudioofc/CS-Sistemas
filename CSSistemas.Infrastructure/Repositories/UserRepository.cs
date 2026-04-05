@@ -46,8 +46,16 @@ public class UserRepository : IUserRepository
         return await query.AnyAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken = default)
-        => await _context.Users.AsNoTracking().OrderBy(u => u.CreatedAt).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<User>> GetAllAsync(string? search = null, CancellationToken cancellationToken = default)
+    {
+        var query = _context.Users.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(u => u.Name.ToLower().Contains(term) || u.Email.ToLower().Contains(term));
+        }
+        return await query.OrderBy(u => u.CreatedAt).ToListAsync(cancellationToken);
+    }
 
     public async Task<IReadOnlyList<Guid>> GetAdminIdsAsync(CancellationToken cancellationToken = default)
         => await _context.Users.AsNoTracking().Where(u => u.IsAdmin).Select(u => u.Id).ToListAsync(cancellationToken);

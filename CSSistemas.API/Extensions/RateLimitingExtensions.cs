@@ -21,6 +21,14 @@ public static class RateLimitingExtensions
                 o.QueueLimit = 0;
             });
 
+            // Limiter para agendamento público (10 por IP por minuto — evita spam de agendamentos falsos)
+            options.AddFixedWindowLimiter("public-booking", o =>
+            {
+                o.PermitLimit = 10;
+                o.Window = TimeSpan.FromMinutes(1);
+                o.QueueLimit = 0;
+            });
+
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",

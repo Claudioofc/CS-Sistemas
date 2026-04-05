@@ -15,8 +15,8 @@ public interface IUserRepository
     Task<User?> GetByResetTokenForUpdateAsync(string token, CancellationToken cancellationToken = default);
     /// <summary>Indica se já existe usuário com este documento (apenas dígitos). excludeUserId para ignorar o próprio usuário ao atualizar perfil.</summary>
     Task<bool> ExistsByDocumentAsync(DocumentType documentType, string documentNumberDigits, Guid? excludeUserId = null, CancellationToken cancellationToken = default);
-    /// <summary>Lista todos os usuários (uso admin).</summary>
-    Task<IReadOnlyList<User>> GetAllAsync(CancellationToken cancellationToken = default);
+    /// <summary>Lista todos os usuários (uso admin), com filtro opcional por nome ou e-mail no banco.</summary>
+    Task<IReadOnlyList<User>> GetAllAsync(string? search = null, CancellationToken cancellationToken = default);
     /// <summary>Ids dos usuários administradores (para notificações de novo cadastro).</summary>
     Task<IReadOnlyList<Guid>> GetAdminIdsAsync(CancellationToken cancellationToken = default);
     Task AddAsync(User user, CancellationToken cancellationToken = default);

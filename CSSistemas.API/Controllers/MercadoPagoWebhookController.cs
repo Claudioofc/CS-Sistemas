@@ -7,6 +7,7 @@ using CSSistemas.Domain.Entities;
 using CSSistemas.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace CSSistemas.API.Controllers;
 
@@ -21,16 +22,20 @@ public class MercadoPagoWebhookController : ControllerBase
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly IHttpClientFactory _httpClientFactory;
 
+    private readonly ILogger<MercadoPagoWebhookController> _logger;
+
     public MercadoPagoWebhookController(
         Microsoft.Extensions.Options.IOptions<PaymentSettings> payment,
         IPlanRepository planRepository,
         ISubscriptionRepository subscriptionRepository,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        ILogger<MercadoPagoWebhookController> logger)
     {
         _payment = payment.Value;
         _planRepository = planRepository;
         _subscriptionRepository = subscriptionRepository;
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
     }
 
     /// <summary>Recebe notificação de ordem (order.updated etc.). Responde 200 rápido e processa em seguida: GET order, se status paid → criar assinatura a partir de external_reference (userId_planId).</summary>
@@ -43,7 +48,11 @@ public class MercadoPagoWebhookController : ControllerBase
         if (!string.IsNullOrWhiteSpace(webhookSecret))
         {
             if (!ValidateSignature(Request.Headers, payload?.Data?.Id, webhookSecret))
+            {
+                _logger.LogWarning("Webhook MP: assinatura inválida. IP={IP}, DataId={DataId}",
+                    HttpContext.Connection.RemoteIpAddress, payload?.Data?.Id);
                 return Ok(); // Retorna 200 para não revelar que a assinatura falhou
+            }
         }
 
         // Resposta imediata para o MP não reenviar
