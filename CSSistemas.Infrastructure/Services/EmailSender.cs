@@ -172,43 +172,17 @@ public class EmailSender : IEmailSender
 
     private MimeMessage BuildMessage(string toEmail, string subject, string plainTextBody)
     {
+        var from = string.IsNullOrWhiteSpace(_settings.FromEmail)
+            ? _settings.SmtpUser!.Trim()
+            : _settings.FromEmail.Trim();
+
         var fromName = string.IsNullOrWhiteSpace(_settings.FromName) ? "CS Sistemas" : _settings.FromName;
-
-        // Se o FromEmail for de um provedor gratuito (Gmail, Yahoo, Hotmail, etc.),
-        // usar o SmtpUser como From (domínio autenticado no Brevo) e o FromEmail no Reply-To.
-        // Isso evita falha de DMARC no Yahoo, Outlook e outros provedores rígidos.
-        var configuredFrom = _settings.FromEmail?.Trim();
-        var isFreeProvider = !string.IsNullOrWhiteSpace(configuredFrom)
-            && (configuredFrom.EndsWith("@gmail.com", StringComparison.OrdinalIgnoreCase)
-             || configuredFrom.EndsWith("@yahoo.com", StringComparison.OrdinalIgnoreCase)
-             || configuredFrom.EndsWith("@yahoo.com.br", StringComparison.OrdinalIgnoreCase)
-             || configuredFrom.EndsWith("@hotmail.com", StringComparison.OrdinalIgnoreCase)
-             || configuredFrom.EndsWith("@outlook.com", StringComparison.OrdinalIgnoreCase)
-             || configuredFrom.EndsWith("@live.com", StringComparison.OrdinalIgnoreCase));
-
-        string from;
-        string? replyTo = null;
-
-        if (isFreeProvider)
-        {
-            // Usa o SmtpUser como From (tem SPF/DKIM válido no Brevo)
-            from = _settings.SmtpUser!.Trim();
-            replyTo = configuredFrom; // Respostas chegam no e-mail configurado
-        }
-        else
-        {
-            from = string.IsNullOrWhiteSpace(configuredFrom) ? _settings.SmtpUser!.Trim() : configuredFrom;
-        }
 
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(fromName, from));
         message.To.Add(MailboxAddress.Parse(toEmail));
         message.Subject = subject;
         message.Body = new TextPart("plain") { Text = plainTextBody };
-
-        if (!string.IsNullOrWhiteSpace(replyTo))
-            message.ReplyTo.Add(MailboxAddress.Parse(replyTo));
-
         return message;
     }
 
