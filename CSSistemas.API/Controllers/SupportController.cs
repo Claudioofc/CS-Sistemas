@@ -31,20 +31,21 @@ public class SupportController : ControllerBase
 
     /// <summary>Envia mensagem de suporte (Fale conosco / Reportar problema) para o administrador.</summary>
     [HttpPost("contact")]
+    [Consumes("multipart/form-data")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> Contact([FromForm] string message, [FromForm] string? pageUrl, [FromForm] IFormFile? attachment, CancellationToken cancellationToken)
+    public async Task<IActionResult> Contact([FromForm] SupportContactRequest request, CancellationToken cancellationToken)
     {
         var userId = User.GetUserId();
         if (userId == null) return Unauthorized();
 
-        var messageTrimmed = message?.Trim();
+        var messageTrimmed = request.Message?.Trim();
         if (string.IsNullOrWhiteSpace(messageTrimmed))
             return BadRequest(new { message = "A mensagem é obrigatória." });
 
         const int maxAttachmentSizeBytes = 10 * 1024 * 1024; // 10 MB
-        if (attachment != null && attachment.Length > maxAttachmentSizeBytes)
+        if (request.Attachment != null && request.Attachment.Length > maxAttachmentSizeBytes)
             return BadRequest(new { message = "O anexo deve ter no máximo 10 MB." });
 
         var adminEmail = _adminSettings.NotificationEmail?.Trim();
@@ -59,12 +60,12 @@ public class SupportController : ControllerBase
 
         byte[]? attachmentBytes = null;
         string? attachmentFileName = null;
-        if (attachment != null && attachment.Length > 0)
+        if (request.Attachment != null && request.Attachment.Length > 0)
         {
             using var memoryStream = new MemoryStream();
-            await attachment.CopyToAsync(memoryStream, cancellationToken);
+            await request.Attachment.CopyToAsync(memoryStream, cancellationToken);
             attachmentBytes = memoryStream.ToArray();
-            attachmentFileName = attachment.FileName;
+            attachmentFileName = request.Attachment.FileName;
         }
 
         await _emailSender.SendSupportRequestAsync(
@@ -72,11 +73,18 @@ public class SupportController : ControllerBase
             user.Name,
             user.Email,
             messageTrimmed,
-            string.IsNullOrWhiteSpace(pageUrl) ? null : pageUrl.Trim(),
+            string.IsNullOrWhiteSpace(request.PageUrl) ? null : request.PageUrl.Trim(),
             attachmentBytes,
             attachmentFileName,
             cancellationToken);
 
         return Ok(new { message = "Mensagem enviada. Entraremos em contato em breve." });
     }
+}
+
+public sealed class SupportContactRequest
+{
+    public string Message { get; set; } = string.Empty;
+    public string? PageUrl { get; set; }
+    public IFormFile? Attachment { get; set; }
 }
