@@ -99,7 +99,7 @@ public class SurveyController : ControllerBase
 
     /// <summary>Retorna todas as respostas (apenas admin).</summary>
     [HttpGet("results")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = "Admin")]
     [ProducesResponseType(typeof(IReadOnlyList<SurveyResultItem>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetResults(CancellationToken cancellationToken)
     {

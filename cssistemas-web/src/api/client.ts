@@ -91,9 +91,8 @@ export async function apiPost<TBody, TResponse>(
     cleanup()
   }
   if (res.ok) return { ok: true, data: data as TResponse }
-  // Log para diagnóstico quando for reset-password e der erro
   if (path.includes('reset-password') && !res.ok) {
-    console.warn('[apiPost] reset-password erro:', { status: res.status, url: buildUrl(path), body: data })
+    console.warn('[apiPost] reset-password erro:', { status: res.status })
   }
   const mensagem = (data?.mensagem ?? data?.Mensagem ?? data?.message ?? data?.Message ?? data?.detail ?? data?.title) as string | undefined
   const erros = (data?.erros ?? data?.Erros) as { campo?: string; mensagem?: string }[] | undefined

@@ -52,7 +52,7 @@ public class SupportController : ControllerBase
         if (request.Attachment != null && request.Attachment.Length > 0)
         {
             if (!SupportAttachmentValidator.IsAllowedContentType(request.Attachment))
-                return BadRequest(new { message = "Tipo de arquivo não permitido. Envie imagem (JPEG, PNG, WebP, GIF) ou PDF." });
+                return BadRequest(new { message = "Tipo de arquivo não permitido. Envie imagem (JPEG, PNG, WebP ou GIF)." });
             if (!SupportAttachmentValidator.HasValidMagicBytes(request.Attachment))
                 return BadRequest(new { message = "Arquivo inválido. O conteúdo não corresponde ao tipo declarado." });
         }
@@ -103,8 +103,7 @@ internal static class SupportAttachmentValidator
 {
     private static readonly string[] AllowedContentTypes =
     {
-        "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif",
-        "application/pdf"
+        "image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"
     };
 
     public static bool IsAllowedContentType(IFormFile file)
@@ -125,8 +124,6 @@ internal static class SupportAttachmentValidator
         // WebP: RIFF????WEBP
         if (read >= 12 && header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46
             && header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50) return true;
-        // PDF: 25 50 44 46 (%PDF)
-        if (header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46) return true;
         return false;
     }
 }

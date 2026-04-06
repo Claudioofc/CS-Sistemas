@@ -21,6 +21,15 @@ public static class RateLimitingExtensions
                 o.QueueLimit = 0;
             });
 
+            // Limiter muito restritivo para forgot-password (2 por hora por IP)
+            // Previne: enumeração de e-mails, spam de redefinição, abuso de fila de e-mail
+            options.AddFixedWindowLimiter("forgot-password", o =>
+            {
+                o.PermitLimit = 2;
+                o.Window = TimeSpan.FromHours(1);
+                o.QueueLimit = 0;
+            });
+
             // Limiter para agendamento público (10 por IP por minuto — evita spam de agendamentos falsos)
             options.AddFixedWindowLimiter("public-booking", o =>
             {

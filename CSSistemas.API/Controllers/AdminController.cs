@@ -1,5 +1,6 @@
 using CSSistemas.API.Authorization;
 using CSSistemas.API.Mappers;
+using CSSistemas.Application.Configuration;
 using CSSistemas.Application.DTOs.Client;
 using CSSistemas.Application.Interfaces;
 using CSSistemas.Domain.Entities;
@@ -7,6 +8,7 @@ using CSSistemas.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CSSistemas.API.Controllers;
 
@@ -21,6 +23,7 @@ public class AdminController : ControllerBase
     private readonly IClientRepository _clientRepository;
     private readonly IPlanRepository _planRepository;
     private readonly IEmailSender _realEmailSender;
+    private readonly AdminSettings _adminSettings;
     private readonly ILogger<AdminController> _logger;
 
     public AdminController(
@@ -30,6 +33,7 @@ public class AdminController : ControllerBase
         IClientRepository clientRepository,
         IPlanRepository planRepository,
         [FromKeyedServices("real")] IEmailSender realEmailSender,
+        IOptions<AdminSettings> adminSettings,
         ILogger<AdminController> logger)
     {
         _userRepository = userRepository;
@@ -38,25 +42,28 @@ public class AdminController : ControllerBase
         _clientRepository = clientRepository;
         _planRepository = planRepository;
         _realEmailSender = realEmailSender;
+        _adminSettings = adminSettings.Value;
         _logger = logger;
     }
 
-    /// <summary>Envia e-mail de teste direto (sem fila) para diagnóstico de SMTP. Apenas admin.</summary>
+    /// <summary>Envia e-mail de teste direto (sem fila) para diagnóstico de SMTP. Apenas admin. Destinatário restrito ao NotificationEmail configurado.</summary>
     [HttpPost("test-email")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> TestEmail([FromQuery] string to, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> TestEmail(CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(to))
-            return BadRequest(new { error = "Informe o e-mail de destino via ?to=email" });
+        var adminEmail = _adminSettings.NotificationEmail?.Trim();
+        if (string.IsNullOrEmpty(adminEmail))
+            return BadRequest(new { error = "Admin:NotificationEmail não configurado. Defina o e-mail de notificação no appsettings." });
         try
         {
-            await _realEmailSender.SendPasswordResetAsync(to.Trim(), "https://teste-smtp-cs-sistemas", cancellationToken);
-            return Ok(new { message = $"E-mail enviado com sucesso para {to.Trim()}" });
+            await _realEmailSender.SendPasswordResetAsync(adminEmail, "https://teste-smtp-cs-sistemas", cancellationToken);
+            return Ok(new { message = $"E-mail de teste enviado para {adminEmail}." });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Falha ao enviar e-mail de teste para {Email}", to.Trim());
+            _logger.LogError(ex, "Falha ao enviar e-mail de teste para {Email}", adminEmail);
             return StatusCode(500, new { error = "Falha ao enviar e-mail. Verifique os logs do servidor." });
         }
     }

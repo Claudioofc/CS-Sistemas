@@ -166,7 +166,7 @@ public class AuthController : ControllerBase
 
     /// <summary>Esqueci minha senha: envia e-mail com link para redefinir (não revela se o e-mail existe).</summary>
     [HttpPost("forgot-password")]
-    [EnableRateLimiting("auth")]
+    [EnableRateLimiting("forgot-password")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
