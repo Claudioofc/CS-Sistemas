@@ -44,9 +44,25 @@ public class EmailSender : IEmailSender
 
         var cancelBlock = string.IsNullOrWhiteSpace(cancelLink)
             ? "\nPara cancelar, entre em contato com o estabelecimento."
-            : $"\nPara cancelar, use o link abaixo:\n{cancelLink}";
-        var body = $"Olá, {clientName}.\n\nSeu agendamento em {businessName} foi confirmado.\n\nServiço: {serviceName}\nData/hora: {scheduledAtFormatted}{cancelBlock}\n\n— CS Sistemas";
-        var message = BuildMessage(toEmail, "Agendamento confirmado - " + businessName, body);
+            : $"\nPara cancelar, acesse:\n{cancelLink}";
+        var plain = $"Olá, {clientName}.\n\nSeu agendamento em {businessName} foi confirmado.\n\nServiço: {serviceName}\nData/hora: {scheduledAtFormatted}{cancelBlock}\n\n— CS Sistemas";
+
+        var cancelHtml = string.IsNullOrWhiteSpace(cancelLink)
+            ? "<p>Para cancelar, entre em contato com o estabelecimento.</p>"
+            : $"<p>Para cancelar seu agendamento, clique no link abaixo:</p>" +
+              $"<p><a href=\"{cancelLink}\" style=\"display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:bold;\">Cancelar agendamento</a></p>" +
+              $"<p style=\"font-size:12px;color:#9ca3af;word-break:break-all;\">Ou copie: {cancelLink}</p>";
+
+        var html = WrapHtml(
+            $"<p>Olá, <strong>{System.Net.WebUtility.HtmlEncode(clientName)}</strong>.</p>" +
+            $"<p>Seu agendamento em <strong>{System.Net.WebUtility.HtmlEncode(businessName)}</strong> foi <strong style=\"color:#16a34a;\">confirmado</strong>.</p>" +
+            $"<table style=\"border-collapse:collapse;margin:16px 0;\">" +
+            $"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Serviço</td><td style=\"padding:4px 0;\"><strong>{System.Net.WebUtility.HtmlEncode(serviceName)}</strong></td></tr>" +
+            $"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Data/hora</td><td style=\"padding:4px 0;\"><strong>{System.Net.WebUtility.HtmlEncode(scheduledAtFormatted)}</strong></td></tr>" +
+            $"</table>" +
+            cancelHtml);
+
+        var message = BuildMessage(toEmail, "Agendamento confirmado - " + businessName, plain, html);
         await SendAsync(message, cancellationToken);
     }
 
@@ -144,8 +160,24 @@ public class EmailSender : IEmailSender
             _logger.LogInformation("E-mail não configurado. Lembrete para {Email}: {BusinessName}, {ScheduledAt}", toEmail, businessName, scheduledAtFormatted);
             return;
         }
-        var body = $"Olá, {clientName}.\n\nEste é um lembrete do seu agendamento em {businessName}.\n\nServiço: {serviceName}\nData/hora: {scheduledAtFormatted}\n\nCaso precise cancelar, use o link abaixo:\n{cancelLink}\n\n— CS Sistemas";
-        var message = BuildMessage(toEmail, "Lembrete de agendamento - " + businessName, body);
+        var plain = $"Olá, {clientName}.\n\nEste é um lembrete do seu agendamento em {businessName}.\n\nServiço: {serviceName}\nData/hora: {scheduledAtFormatted}\n\nCaso precise cancelar, acesse:\n{cancelLink}\n\n— CS Sistemas";
+
+        var cancelHtml = string.IsNullOrWhiteSpace(cancelLink)
+            ? ""
+            : $"<p>Caso precise cancelar, clique no link abaixo:</p>" +
+              $"<p><a href=\"{cancelLink}\" style=\"display:inline-block;background:#dc2626;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:bold;\">Cancelar agendamento</a></p>" +
+              $"<p style=\"font-size:12px;color:#9ca3af;word-break:break-all;\">Ou copie: {cancelLink}</p>";
+
+        var html = WrapHtml(
+            $"<p>Olá, <strong>{System.Net.WebUtility.HtmlEncode(clientName)}</strong>.</p>" +
+            $"<p>Este é um lembrete do seu agendamento em <strong>{System.Net.WebUtility.HtmlEncode(businessName)}</strong>.</p>" +
+            $"<table style=\"border-collapse:collapse;margin:16px 0;\">" +
+            $"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Serviço</td><td style=\"padding:4px 0;\"><strong>{System.Net.WebUtility.HtmlEncode(serviceName)}</strong></td></tr>" +
+            $"<tr><td style=\"padding:4px 12px 4px 0;color:#6b7280;\">Data/hora</td><td style=\"padding:4px 0;\"><strong>{System.Net.WebUtility.HtmlEncode(scheduledAtFormatted)}</strong></td></tr>" +
+            $"</table>" +
+            cancelHtml);
+
+        var message = BuildMessage(toEmail, "Lembrete de agendamento - " + businessName, plain, html);
         await SendAsync(message, cancellationToken);
     }
 
@@ -170,7 +202,7 @@ public class EmailSender : IEmailSender
             && !string.IsNullOrWhiteSpace(_settings.SmtpPassword);
     }
 
-    private MimeMessage BuildMessage(string toEmail, string subject, string plainTextBody)
+    private MimeMessage BuildMessage(string toEmail, string subject, string plainTextBody, string? htmlBody = null)
     {
         var from = string.IsNullOrWhiteSpace(_settings.FromEmail)
             ? _settings.SmtpUser!.Trim()
@@ -182,9 +214,33 @@ public class EmailSender : IEmailSender
         message.From.Add(new MailboxAddress(fromName, from));
         message.To.Add(MailboxAddress.Parse(toEmail));
         message.Subject = subject;
-        message.Body = new TextPart("plain") { Text = plainTextBody };
+
+        if (!string.IsNullOrEmpty(htmlBody))
+        {
+            // multipart/alternative: clientes de e-mail usam HTML quando suportam, texto puro como fallback
+            var builder = new BodyBuilder
+            {
+                TextBody = plainTextBody,
+                HtmlBody = htmlBody
+            };
+            message.Body = builder.ToMessageBody();
+        }
+        else
+        {
+            message.Body = new TextPart("plain") { Text = plainTextBody };
+        }
+
         return message;
     }
+
+    private static string WrapHtml(string bodyHtml) => $@"<!DOCTYPE html>
+<html lang=""pt-BR"">
+<head><meta charset=""utf-8""><meta name=""viewport"" content=""width=device-width,initial-scale=1""></head>
+<body style=""font-family:Arial,sans-serif;font-size:15px;color:#222;max-width:560px;margin:0 auto;padding:24px 16px;"">
+{bodyHtml}
+<hr style=""border:none;border-top:1px solid #e5e7eb;margin:24px 0;"">
+<p style=""font-size:12px;color:#9ca3af;"">CS Sistemas — Plataforma de agendamento</p>
+</body></html>";
 
     private async Task SendAsync(MimeMessage message, CancellationToken cancellationToken)
     {
