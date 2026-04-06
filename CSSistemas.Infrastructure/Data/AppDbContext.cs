@@ -137,6 +137,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.SubscriptionType);
             entity.Property(e => e.StartedAt);
             entity.Property(e => e.EndsAt);
+            entity.Property(e => e.ExternalOrderId).HasMaxLength(128);
             entity.HasQueryFilter(e => !e.IsDeleted);
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
         });

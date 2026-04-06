@@ -60,6 +60,45 @@ public class BusinessRepository : IBusinessRepository
     {
         var business = await GetByIdAndUserIdForUpdateAsync(id, userId, cancellationToken);
         if (business == null) return false;
+
+        var now = DateTime.UtcNow;
+
+        // Cascata: soft-delete em todos os filhos do negócio
+        await _context.Services
+            .Where(e => e.BusinessId == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.IsDeleted, true)
+                .SetProperty(e => e.DeletedAt, now)
+                .SetProperty(e => e.UpdatedAt, now), cancellationToken);
+
+        await _context.Appointments
+            .Where(e => e.BusinessId == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.IsDeleted, true)
+                .SetProperty(e => e.DeletedAt, now)
+                .SetProperty(e => e.UpdatedAt, now), cancellationToken);
+
+        await _context.Clients
+            .Where(e => e.BusinessId == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.IsDeleted, true)
+                .SetProperty(e => e.DeletedAt, now)
+                .SetProperty(e => e.UpdatedAt, now), cancellationToken);
+
+        await _context.Employees
+            .Where(e => e.BusinessId == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.IsDeleted, true)
+                .SetProperty(e => e.DeletedAt, now)
+                .SetProperty(e => e.UpdatedAt, now), cancellationToken);
+
+        await _context.BusinessHours
+            .Where(e => e.BusinessId == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.IsDeleted, true)
+                .SetProperty(e => e.DeletedAt, now)
+                .SetProperty(e => e.UpdatedAt, now), cancellationToken);
+
         business.MarkAsDeleted();
         await _context.SaveChangesAsync(cancellationToken);
         return true;

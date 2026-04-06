@@ -71,6 +71,7 @@ public static class DependencyInjection
         services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
         services.AddScoped<IPlanRepository, PlanRepository>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddMemoryCache();
 
         return services;
     }

@@ -190,14 +190,11 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest? request, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("ResetPassword: request is null={RequestNull}", request == null);
         if (request == null)
         {
             _logger.LogWarning("ResetPassword: corpo da requisição nulo ou inválido.");
             return BadRequest(new ValidationErrorResponse("Corpo da requisição inválido. Envie token e newPassword.", Array.Empty<CampoErro>()));
         }
-        _logger.LogInformation("ResetPassword: Token length={TokenLen}, NewPassword length={NewPasswordLen}",
-            request.Token?.Length ?? 0, request.NewPassword?.Length ?? 0);
         var validation = await _resetPasswordValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {

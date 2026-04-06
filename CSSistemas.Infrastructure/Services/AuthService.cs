@@ -6,6 +6,7 @@ using CSSistemas.Application.Configuration;
 using CSSistemas.Application.DTOs.Auth;
 using CSSistemas.Application.Exceptions;
 using CSSistemas.Application.Interfaces;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using CSSistemas.Domain.Entities;
 using CSSistemas.Domain.Enums;
@@ -16,6 +17,9 @@ namespace CSSistemas.Infrastructure.Services;
 public class AuthService : IAuthService
 {
     private const int ResetTokenExpiryHours = 1;
+    // Rate limit por e-mail: máx 10 tentativas em 15 minutos (independente do IP)
+    private const int EmailRateLimitMaxAttempts = 10;
+    private static readonly TimeSpan EmailRateLimitWindow = TimeSpan.FromMinutes(15);
 
     private readonly IUserRepository _userRepository;
     private readonly ISubscriptionRepository _subscriptionRepository;
@@ -24,6 +28,7 @@ public class AuthService : IAuthService
     private readonly JwtSettings _jwtSettings;
     private readonly EmailSettings _emailSettings;
     private readonly AdminSettings _adminSettings;
+    private readonly IMemoryCache _cache;
 
     public AuthService(
         IUserRepository userRepository,
@@ -32,7 +37,8 @@ public class AuthService : IAuthService
         IEmailSender emailSender,
         IOptions<JwtSettings> jwtSettings,
         IOptions<EmailSettings> emailSettings,
-        IOptions<AdminSettings> adminSettings)
+        IOptions<AdminSettings> adminSettings,
+        IMemoryCache cache)
     {
         _userRepository = userRepository;
         _subscriptionRepository = subscriptionRepository;
@@ -41,6 +47,7 @@ public class AuthService : IAuthService
         _jwtSettings = jwtSettings.Value;
         _emailSettings = emailSettings.Value;
         _adminSettings = adminSettings.Value;
+        _cache = cache;
     }
 
     private const int MaxLoginAttempts = 3;
@@ -50,9 +57,24 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
             return new LoginFailureResult(MaxLoginAttempts);
 
-        var user = await _userRepository.GetByEmailForUpdateAsync(request.Email, cancellationToken);
+        var email = request.Email.Trim().ToLowerInvariant();
+
+        // Rate limit por e-mail: bloqueia ataques distribuídos (múltiplos IPs, mesmo e-mail)
+        var rateCacheKey = $"login_fail_email:{email}";
+        var emailFailCount = _cache.GetOrCreate(rateCacheKey, entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = EmailRateLimitWindow;
+            return 0;
+        });
+        if (emailFailCount >= EmailRateLimitMaxAttempts)
+            return new LoginLockedResult(DateTime.UtcNow.Add(EmailRateLimitWindow));
+
+        var user = await _userRepository.GetByEmailForUpdateAsync(email, cancellationToken);
         if (user == null)
+        {
+            _cache.Set(rateCacheKey, emailFailCount + 1, EmailRateLimitWindow);
             return new LoginFailureResult(MaxLoginAttempts);
+        }
 
         // Bloqueio indefinido após 3 falhas; só desbloqueia ao redefinir senha
         if (user.LockoutEnd.HasValue)
@@ -60,12 +82,15 @@ public class AuthService : IAuthService
 
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
+            _cache.Set(rateCacheKey, emailFailCount + 1, EmailRateLimitWindow);
             user.RecordFailedLogin();
             await _userRepository.UpdateAsync(user, cancellationToken);
             var remaining = Math.Max(0, MaxLoginAttempts - user.FailedLoginAttempts);
             return new LoginFailureResult(remaining);
         }
 
+        // Login bem-sucedido: limpa contador de tentativas
+        _cache.Remove(rateCacheKey);
         user.ResetFailedLogins();
         await _userRepository.UpdateAsync(user, cancellationToken);
         var jwt = GenerateToken(user.Id, user.Email, user.Name, user.IsAdmin);
