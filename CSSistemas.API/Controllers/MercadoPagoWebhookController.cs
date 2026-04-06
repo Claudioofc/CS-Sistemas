@@ -87,10 +87,21 @@ public class MercadoPagoWebhookController : ControllerBase
 
         var plan = await _planRepository.GetByIdAsync(planId, cancellationToken);
         if (plan == null)
+        {
+            _logger.LogWarning("Webhook MP: plano {PlanId} não encontrado para orderId={OrderId}", planId, orderId);
             return Ok();
+        }
 
-        var subscription = Subscription.CreateFromPlan(userId, plan.BillingIntervalMonths);
+        // Idempotência: ignora se o mesmo orderId já gerou uma assinatura
+        if (await _subscriptionRepository.ExistsWithExternalOrderIdAsync(orderId, cancellationToken))
+        {
+            _logger.LogInformation("Webhook MP: orderId={OrderId} já processado, ignorando reenvio.", orderId);
+            return Ok();
+        }
+
+        var subscription = Subscription.CreateFromPlan(userId, plan.BillingIntervalMonths, externalOrderId: orderId);
         await _subscriptionRepository.AddAsync(subscription, cancellationToken);
+        _logger.LogInformation("Webhook MP: Premium concedido ao usuário {UserId} via orderId={OrderId}", userId, orderId);
 
         return Ok();
     }

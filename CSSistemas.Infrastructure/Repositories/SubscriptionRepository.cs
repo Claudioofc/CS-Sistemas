@@ -61,6 +61,9 @@ public class SubscriptionRepository : ISubscriptionRepository
         await _context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> ExistsWithExternalOrderIdAsync(string externalOrderId, CancellationToken cancellationToken = default)
+        => await _context.Subscriptions.AnyAsync(s => s.ExternalOrderId == externalOrderId, cancellationToken);
+
     public async Task<IReadOnlyList<Subscription>> GetExpiringForWarningAsync(int daysBeforeExpiry, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;

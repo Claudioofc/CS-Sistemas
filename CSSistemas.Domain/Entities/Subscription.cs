@@ -15,6 +15,8 @@ public class Subscription : EntityBase
     public DateTime EndsAt { get; protected set; }
     public DateTime? ExpiryWarning7DaySentAt { get; protected set; }
     public DateTime? ExpiryWarning1DaySentAt { get; protected set; }
+    /// <summary>ID externo do gateway de pagamento (ex.: orderId do Mercado Pago) para evitar duplicação via idempotência.</summary>
+    public string? ExternalOrderId { get; protected set; }
 
     protected Subscription() { }
 
@@ -35,7 +37,7 @@ public class Subscription : EntityBase
     }
 
     /// <summary>Cria assinatura paga (Premium) a partir do plano: Monthly com duração conforme billingIntervalMonths.</summary>
-    public static Subscription CreateFromPlan(Guid userId, int billingIntervalMonths)
+    public static Subscription CreateFromPlan(Guid userId, int billingIntervalMonths, string? externalOrderId = null)
     {
         var now = DateTime.UtcNow;
         var endsAt = billingIntervalMonths <= 0 ? now.AddMonths(1) : now.AddMonths(billingIntervalMonths);
@@ -44,7 +46,8 @@ public class Subscription : EntityBase
             UserId = userId,
             SubscriptionType = SubscriptionType.Monthly,
             StartedAt = now,
-            EndsAt = endsAt
+            EndsAt = endsAt,
+            ExternalOrderId = externalOrderId
         };
     }
 

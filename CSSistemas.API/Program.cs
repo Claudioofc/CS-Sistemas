@@ -9,7 +9,7 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddApiAuthorization();
 builder.Services.AddApiValidators();
-builder.Services.AddApiCors(builder.Configuration);
+builder.Services.AddApiCors(builder.Configuration, builder.Environment);
 builder.Services.AddApiRateLimiting();
 builder.Services.AddApiControllers();
 builder.Services.AddHealthChecks();

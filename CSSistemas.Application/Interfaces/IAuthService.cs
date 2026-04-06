@@ -17,4 +17,7 @@ public interface IAuthService
 
     /// <summary>Redefine a senha com o token recebido por e-mail. Retorna true se válido.</summary>
     Task<bool> ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Emite um novo JWT para o usuário (usado no restore-session após autenticação via cookie).</summary>
+    LoginResponse IssueTokenForUser(Guid userId, string email, string name, bool isAdmin, string? profilePhotoUrl = null);
 }

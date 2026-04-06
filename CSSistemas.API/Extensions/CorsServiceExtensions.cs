@@ -1,12 +1,14 @@
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace CSSistemas.API.Extensions;
 
 /// <summary>Configuração de CORS — origens permitidas via BaseBookingUrl + CorsAllowedOrigins.</summary>
 public static class CorsServiceExtensions
 {
-    public static IServiceCollection AddApiCors(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddApiCors(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment environment)
     {
         var baseUrl = configuration["BaseBookingUrl"]?.TrimEnd('/');
         var extra = configuration.GetSection("CorsAllowedOrigins").Get<string[]>() ?? [];
@@ -15,9 +17,12 @@ public static class CorsServiceExtensions
         if (!string.IsNullOrWhiteSpace(baseUrl)) allowed.Add(baseUrl);
         foreach (var o in extra) if (!string.IsNullOrWhiteSpace(o)) allowed.Add(o.TrimEnd('/'));
 
-        // Desenvolvimento local: sempre permite localhost
-        allowed.Add("http://localhost:5173");
-        allowed.Add("http://localhost:5264");
+        // Localhost permitido apenas em desenvolvimento local
+        if (environment.IsDevelopment())
+        {
+            allowed.Add("http://localhost:5173");
+            allowed.Add("http://localhost:5264");
+        }
 
         services.AddCors(options =>
         {

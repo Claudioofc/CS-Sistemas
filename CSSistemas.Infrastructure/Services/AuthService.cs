@@ -200,6 +200,13 @@ public class AuthService : IAuthService
         return true;
     }
 
+    public LoginResponse IssueTokenForUser(Guid userId, string email, string name, bool isAdmin, string? profilePhotoUrl = null)
+    {
+        var jwt = GenerateToken(userId, email, name, isAdmin);
+        var expiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.ExpiresMinutes);
+        return new LoginResponse(jwt, email, name, expiresAt, profilePhotoUrl);
+    }
+
     private static string GenerateOtp()
     {
         var bytes = new byte[4];

@@ -20,6 +20,8 @@ public interface ISubscriptionRepository
 
     Task AddAsync(Subscription subscription, CancellationToken cancellationToken = default);
     Task UpdateAsync(Subscription subscription, CancellationToken cancellationToken = default);
+    /// <summary>Verifica se já existe assinatura com o ExternalOrderId informado (idempotência de webhook).</summary>
+    Task<bool> ExistsWithExternalOrderIdAsync(string externalOrderId, CancellationToken cancellationToken = default);
     /// <summary>Retorna assinaturas ativas (Monthly) que vencem em ~daysBeforeExpiry dias e ainda não tiveram o aviso enviado.</summary>
     Task<IReadOnlyList<Subscription>> GetExpiringForWarningAsync(int daysBeforeExpiry, CancellationToken cancellationToken = default);
 }

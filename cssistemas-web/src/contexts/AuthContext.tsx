@@ -1,9 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { apiGet, apiPatch, apiPost, apiPostWithAuth } from '../api/client'
 
-const TOKEN_KEY = 'cssistemas_token'
-
-/** 0 = CPF, 1 = CNPJ (enum do backend). */
 export type DocumentType = 0 | 1
 
 export type User = {
@@ -46,13 +43,21 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem(TOKEN_KEY))
+  // Token armazenado apenas em memória (nunca em sessionStorage/localStorage)
+  // A persistência da sessão usa o cookie HttpOnly cssistemas_auth via restore-session
+  const [token, setTokenState] = useState<string | null>(null)
+  const tokenRef = useRef<string | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
+  const setToken = useCallback((t: string | null) => {
+    tokenRef.current = t
+    setTokenState(t)
+  }, [])
+
   const fetchSubscriptionStatus = useCallback(async () => {
-    const t = sessionStorage.getItem(TOKEN_KEY)
+    const t = tokenRef.current
     if (!t) {
       setSubscriptionStatus(null)
       return
@@ -71,37 +76,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const fetchUser = useCallback(async () => {
-    const t = sessionStorage.getItem(TOKEN_KEY)
-    if (!t) {
-      setUser(null)
-      setIsLoading(false)
-      return
-    }
-    const res = await apiGet<{ id: string; email: string; name: string; profilePhotoUrl: string | null; documentType?: number | null; documentNumber?: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean; emailVerified?: boolean }>('/api/auth/me', t)
-    if (res.ok) {
-      setToken(t)
-      setUser({
-        id: res.data.id,
-        email: res.data.email,
-        name: res.data.name,
-        profilePhotoUrl: res.data.profilePhotoUrl ?? null,
-        documentType: res.data.documentType != null ? (res.data.documentType as DocumentType) : null,
-        documentNumber: res.data.documentNumber ?? null,
-        isAdmin: res.data.isAdmin ?? false,
-        showWelcomeBanner: res.data.showWelcomeBanner ?? false,
-        emailVerified: res.data.emailVerified ?? true,
+    try {
+      // Restaura sessão via cookie HttpOnly (sem ler sessionStorage)
+      const restoreRes = await fetch('/api/auth/restore-session', {
+        method: 'GET',
+        credentials: 'include',
       })
-    } else {
+      if (!restoreRes.ok) {
+        setToken(null)
+        setUser(null)
+        setIsLoading(false)
+        return
+      }
+      const restoreData = await restoreRes.json() as { token: string }
+      setToken(restoreData.token)
+
+      // Busca dados completos do usuário com o token recém-emitido
+      const meRes = await apiGet<{ id: string; email: string; name: string; profilePhotoUrl: string | null; documentType?: number | null; documentNumber?: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean; emailVerified?: boolean }>('/api/auth/me', restoreData.token)
+      if (meRes.ok) {
+        setUser({
+          id: meRes.data.id,
+          email: meRes.data.email,
+          name: meRes.data.name,
+          profilePhotoUrl: meRes.data.profilePhotoUrl ?? null,
+          documentType: meRes.data.documentType != null ? (meRes.data.documentType as DocumentType) : null,
+          documentNumber: meRes.data.documentNumber ?? null,
+          isAdmin: meRes.data.isAdmin ?? false,
+          showWelcomeBanner: meRes.data.showWelcomeBanner ?? false,
+          emailVerified: meRes.data.emailVerified ?? true,
+        })
+      } else {
+        setToken(null)
+        setUser(null)
+      }
+    } catch {
       setToken(null)
       setUser(null)
-      setSubscriptionStatus(null)
-      sessionStorage.removeItem(TOKEN_KEY)
     }
     setIsLoading(false)
-  }, [])
+  }, [setToken])
 
   useEffect(() => {
-    if (user && token) fetchSubscriptionStatus()
+    if (user && tokenRef.current) fetchSubscriptionStatus()
     else setSubscriptionStatus(null)
   }, [user, token, fetchSubscriptionStatus])
 
@@ -123,7 +139,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         locked: err.locked,
       }
     }
-    sessionStorage.setItem(TOKEN_KEY, res.data.token)
     setToken(res.data.token)
     setUser({
       id: '',
@@ -138,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
     await fetchUser()
     return { ok: true }
-  }, [fetchUser])
+  }, [fetchUser, setToken])
 
   const register = useCallback(async (
     name: string,
@@ -167,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const updateProfile = useCallback(async (payload: { name: string; profilePhotoUrl?: string | null; documentType?: DocumentType | null; documentNumber?: string | null }) => {
-    const t = sessionStorage.getItem(TOKEN_KEY)
+    const t = tokenRef.current
     if (!t) return { ok: false, message: 'Não autenticado.' }
     type ProfileResponse = { id: string; email: string; name: string; profilePhotoUrl: string | null; documentType: number | null; documentNumber: string | null; isAdmin?: boolean; showWelcomeBanner?: boolean; emailVerified?: boolean }
     const res = await apiPatch<typeof payload, ProfileResponse>(
@@ -195,7 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const dismissWelcomeBanner = useCallback(async () => {
-    const t = sessionStorage.getItem(TOKEN_KEY)
+    const t = tokenRef.current
     if (!t || !user) return
     const res = await apiPostWithAuth<Record<string, never>, unknown>('/api/auth/welcome-banner-dismissed', {}, t)
     if (res.ok && user) {
@@ -212,7 +227,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const err = res.error as { message?: string; mensagem?: string }
       return { ok: false, message: err.message ?? err.mensagem ?? 'Código inválido ou expirado.' }
     }
-    sessionStorage.setItem(TOKEN_KEY, res.data.token)
     setToken(res.data.token)
     setUser({
       id: '',
@@ -227,16 +241,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })
     await fetchUser()
     return { ok: true }
-  }, [fetchUser])
+  }, [fetchUser, setToken])
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem(TOKEN_KEY)
     setToken(null)
     setUser(null)
     setSubscriptionStatus(null)
     // Limpa o cookie HttpOnly no servidor (fire-and-forget)
     fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => undefined)
-  }, [])
+  }, [setToken])
 
   return (
     <AuthContext.Provider value={{ token, user, isLoading, subscriptionStatus, fetchSubscriptionStatus, login, register, logout, fetchUser, setUser, updateProfile, dismissWelcomeBanner, verifyEmail }}>

@@ -14,6 +14,14 @@ public static class AuthenticationServiceExtensions
     {
         var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
             ?? throw new InvalidOperationException("JWT não configurado em appsettings.");
+
+        if (string.IsNullOrWhiteSpace(jwtSettings.Secret)
+            || jwtSettings.Secret.Length < 32
+            || jwtSettings.Secret.Contains("DEFINA")
+            || jwtSettings.Secret.Contains("SECRET"))
+            throw new InvalidOperationException(
+                "Jwt:Secret inválido. Configure um segredo aleatório com no mínimo 32 caracteres em appsettings (nunca use o placeholder padrão).");
+
         var key = Encoding.UTF8.GetBytes(jwtSettings.Secret);
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

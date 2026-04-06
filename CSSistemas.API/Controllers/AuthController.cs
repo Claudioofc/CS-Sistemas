@@ -316,6 +316,24 @@ public class AuthController : ControllerBase
         return Ok(new CurrentUserResponse(user.Id, user.Email, user.Name, user.ProfilePhotoUrl, user.DocumentType, user.DocumentNumber, user.IsAdmin, user.ShowWelcomeBanner));
     }
 
+    /// <summary>Restaura a sessão via cookie HttpOnly — retorna novo JWT para uso em memória (sem sessionStorage).</summary>
+    [HttpGet("restore-session")]
+    [Authorize]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RestoreSession(CancellationToken cancellationToken)
+    {
+        var userId = User.GetUserId();
+        if (userId == null) return Unauthorized();
+
+        var user = await _userRepository.GetByIdAsync(userId.Value, cancellationToken);
+        if (user == null) return Unauthorized();
+
+        var response = _authService.IssueTokenForUser(user.Id, user.Email, user.Name, user.IsAdmin, user.ProfilePhotoUrl);
+        SetAuthCookie(response.Token);
+        return Ok(response);
+    }
+
     /// <summary>Logout — remove o cookie de autenticação.</summary>
     [HttpPost("logout")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

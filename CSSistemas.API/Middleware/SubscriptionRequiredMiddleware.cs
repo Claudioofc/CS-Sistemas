@@ -17,6 +17,7 @@ public class SubscriptionRequiredMiddleware
     private static readonly (string Path, string Method)[] Whitelist =
     {
         ("/api/auth/me", "GET"),
+        ("/api/auth/restore-session", "GET"),
         ("/api/auth/profile", "PATCH"),
         ("/api/auth/profile-photo", "POST"),
         ("/api/auth/welcome-banner-dismissed", "POST"),
