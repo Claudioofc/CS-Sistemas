@@ -123,6 +123,27 @@ public class AdminController : ControllerBase
         return Ok(list.Select(ClientResponseMapper.ToResponse));
     }
 
+    /// <summary>Concede assinatura Premium manualmente a um usuário (para corrigir falhas de webhook, dar cortesia, etc.). Apenas admin.</summary>
+    [HttpPost("users/{userId:guid}/grant-subscription")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GrantSubscription(Guid userId, [FromBody] GrantSubscriptionRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Months < 1 || request.Months > 24)
+            return BadRequest(new { message = "O número de meses deve ser entre 1 e 24." });
+
+        var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user == null) return NotFound(new { message = "Usuário não encontrado." });
+
+        var subscription = Subscription.CreateFromPlan(userId, request.Months);
+        await _subscriptionRepository.AddAsync(subscription, cancellationToken);
+
+        _logger.LogInformation("Admin concedeu {Months} mês(es) de Premium ao usuário {UserId} ({Email})", request.Months, userId, user.Email);
+
+        return Ok(new { message = $"Premium concedido: {request.Months} mês(es) para {user.Email}. Válido até {subscription.EndsAt:dd/MM/yyyy}." });
+    }
+
     /// <summary>Registro de assinaturas premium (quem assinou, quando e valor). Apenas admin.</summary>
     [HttpGet("subscriptions/premium")]
     [ProducesResponseType(typeof(IReadOnlyList<AdminPremiumSubscriptionResponse>), StatusCodes.Status200OK)]
@@ -157,3 +178,6 @@ public record AdminBusinessResponse(Guid Id, Guid UserId, string OwnerName, stri
 
 /// <summary>Registro de assinatura premium para painel admin (quem assinou, quando e valor do plano).</summary>
 public record AdminPremiumSubscriptionResponse(Guid UserId, string UserName, string UserEmail, DateTime StartedAt, DateTime EndsAt, string PlanName, decimal Price);
+
+/// <summary>Request para concessão manual de Premium pelo admin.</summary>
+public record GrantSubscriptionRequest(int Months);
