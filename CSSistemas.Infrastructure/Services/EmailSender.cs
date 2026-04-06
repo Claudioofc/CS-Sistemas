@@ -49,9 +49,7 @@ public class EmailSender : IEmailSender
 
         var cancelHtml = string.IsNullOrWhiteSpace(cancelLink)
             ? "<p>Para cancelar, entre em contato com o estabelecimento.</p>"
-            : $"<p>Para cancelar seu agendamento, clique no link abaixo:</p>" +
-              $"<p><a href=\"{cancelLink}\" style=\"display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:bold;\">Cancelar agendamento</a></p>" +
-              $"<p style=\"font-size:12px;color:#9ca3af;word-break:break-all;\">Ou copie: {cancelLink}</p>";
+            : $"<p><a href=\"{cancelLink}\" style=\"display:inline-block;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:bold;\">Cancelar agendamento</a></p>";
 
         var html = WrapHtml(
             $"<p>Olá, <strong>{System.Net.WebUtility.HtmlEncode(clientName)}</strong>.</p>" +
@@ -164,9 +162,7 @@ public class EmailSender : IEmailSender
 
         var cancelHtml = string.IsNullOrWhiteSpace(cancelLink)
             ? ""
-            : $"<p>Caso precise cancelar, clique no link abaixo:</p>" +
-              $"<p><a href=\"{cancelLink}\" style=\"display:inline-block;background:#dc2626;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:bold;\">Cancelar agendamento</a></p>" +
-              $"<p style=\"font-size:12px;color:#9ca3af;word-break:break-all;\">Ou copie: {cancelLink}</p>";
+            : $"<p><a href=\"{cancelLink}\" style=\"display:inline-block;background:#dc2626;color:#fff;text-decoration:none;padding:10px 20px;border-radius:6px;font-weight:bold;\">Cancelar agendamento</a></p>";
 
         var html = WrapHtml(
             $"<p>Olá, <strong>{System.Net.WebUtility.HtmlEncode(clientName)}</strong>.</p>" +
