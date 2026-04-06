@@ -236,7 +236,7 @@ public class EmailSender : IEmailSender
     private static string WrapHtml(string bodyHtml) => $@"<!DOCTYPE html>
 <html lang=""pt-BR"">
 <head><meta charset=""utf-8""><meta name=""viewport"" content=""width=device-width,initial-scale=1""></head>
-<body style=""font-family:Arial,sans-serif;font-size:15px;color:#222;max-width:560px;margin:0 auto;padding:24px 16px;"">
+<body style=""font-family:Arial,sans-serif;font-size:15px;color:#222;margin:0;padding:24px 16px;text-align:left;"">
 {bodyHtml}
 <hr style=""border:none;border-top:1px solid #e5e7eb;margin:24px 0;"">
 <p style=""font-size:12px;color:#9ca3af;"">CS Sistemas — Plataforma de agendamento</p>
