@@ -20,7 +20,8 @@ public class AppointmentRequestValidator : AbstractValidator<AppointmentRequest>
 
         RuleFor(x => x.ScheduledAt)
             .NotEmpty().WithMessage("Data e hora do agendamento são obrigatórias.")
-            .Must(BeFutureOrToday).WithMessage("Data/hora do agendamento deve ser futura ou de hoje.");
+            .Must(BeFutureOrToday).WithMessage("Data/hora do agendamento deve ser futura ou de hoje.")
+            .Must(BeWithinOneYear).WithMessage("Agendamento não pode ser criado com mais de 1 ano de antecedência.");
 
         RuleFor(x => x.ClientEmail)
             .EmailAddress().When(x => !string.IsNullOrEmpty(x.ClientEmail))
@@ -39,5 +40,11 @@ public class AppointmentRequestValidator : AbstractValidator<AppointmentRequest>
         var now = DateTime.UtcNow;
         var date = value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
         return date >= now.AddMinutes(-5); // pequena tolerância
+    }
+
+    private static bool BeWithinOneYear(DateTime value)
+    {
+        var date = value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        return date <= DateTime.UtcNow.AddYears(1);
     }
 }

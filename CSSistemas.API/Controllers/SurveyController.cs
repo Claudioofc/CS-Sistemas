@@ -83,7 +83,7 @@ public class SurveyController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Registra que o usuário dispensou o modal sem responder.</summary>
+    /// <summary>Registra que o usuário dispensou o modal sem responder. Idempotente após 2 dispensas.</summary>
     [HttpPost("dismiss")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Dismiss(CancellationToken cancellationToken)
@@ -92,6 +92,8 @@ public class SurveyController : ControllerBase
         if (userId == null) return Unauthorized();
         var user = await _userRepo.GetByIdForUpdateAsync(userId.Value, cancellationToken);
         if (user == null) return Unauthorized();
+        if (user.SurveyDismissals >= 2)
+            return NoContent(); // já atingiu o limite — não incrementa desnecessariamente
         user.IncrementSurveyDismissals();
         await _userRepo.UpdateAsync(user, cancellationToken);
         return NoContent();

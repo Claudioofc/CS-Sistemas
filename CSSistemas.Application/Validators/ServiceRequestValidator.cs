@@ -21,6 +21,8 @@ public class ServiceRequestValidator : AbstractValidator<ServiceRequest>
 
         RuleFor(x => x.Price)
             .GreaterThanOrEqualTo(0).When(x => x.Price.HasValue)
-            .WithMessage("Preço não pode ser negativo.");
+            .WithMessage("Preço não pode ser negativo.")
+            .LessThanOrEqualTo(99999.99m).When(x => x.Price.HasValue)
+            .WithMessage("Preço máximo é R$ 99.999,99.");
     }
 }

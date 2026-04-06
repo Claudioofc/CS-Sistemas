@@ -125,6 +125,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetchUser()
   }, [fetchUser])
 
+  // Atualiza status da subscription ao ganhar foco (aba voltou ao primeiro plano)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (user && tokenRef.current) fetchSubscriptionStatus()
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [user, fetchSubscriptionStatus])
+
   const login = useCallback(async (email: string, password: string) => {
     const res = await apiPost<{ email: string; password: string }, { token: string; email: string; name?: string; profilePhotoUrl?: string | null }>(
       '/api/auth/login',
